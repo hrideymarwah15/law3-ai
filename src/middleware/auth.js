@@ -53,12 +53,24 @@ const supabaseAuthMiddleware = async (req, res, next) => {
       throw new ForbiddenError('Account is deactivated');
     }
 
+    // If user is a lawyer, fetch lawyer profile
+    let lawyerProfile = null;
+    if (profile.role === 'lawyer') {
+      const { data: lawyer } = await supabaseAdmin
+        .from('lawyers')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      lawyerProfile = lawyer;
+    }
+
     // Attach user data to request
     req.user = {
       id: user.id,
       email: user.email,
       phone: user.phone,
       ...profile,
+      lawyerProfile,
       authUser: user,
     };
     req.token = token;
@@ -188,9 +200,54 @@ const ownershipMiddleware = (getOwnerId) => {
   };
 };
 
+/**
+ * Middleware to check if lawyer is verified by admin
+ * Only verified lawyers can accept consultations, set availability, etc.
+ */
+const verifiedLawyerMiddleware = (req, res, next) => {
+  if (!req.user) {
+    return next(new UnauthorizedError('Authentication required'));
+  }
+
+  // Admins bypass this check
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  // Must be a lawyer
+  if (req.user.role !== 'lawyer') {
+    return next(new ForbiddenError('This action is only available for lawyers'));
+  }
+
+  // Check if lawyer profile exists and is verified
+  const lawyerProfile = req.user.lawyerProfile;
+  
+  if (!lawyerProfile) {
+    logger.warn({
+      message: 'Lawyer profile not found',
+      userId: req.user.id,
+      requestId: req.id,
+    });
+    return next(new ForbiddenError('Lawyer profile not found. Please complete your profile.'));
+  }
+
+  if (lawyerProfile.verification_status !== 'verified') {
+    logger.warn({
+      message: 'Unverified lawyer attempting restricted action',
+      userId: req.user.id,
+      verificationStatus: lawyerProfile.verification_status,
+      requestId: req.id,
+    });
+    return next(new ForbiddenError('Your lawyer profile is not verified yet. Please wait for admin approval.'));
+  }
+
+  next();
+};
+
 module.exports = {
   supabaseAuthMiddleware,
   optionalAuthMiddleware,
   roleMiddleware,
   ownershipMiddleware,
+  verifiedLawyerMiddleware,
 };

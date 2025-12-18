@@ -134,6 +134,17 @@ const webhook = rateLimit({
   handler: rateLimitHandler,
 });
 
+// Chat message rate limiter
+const message = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 messages per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: getUserKey,
+  handler: rateLimitHandler,
+  message: 'Too many messages. Please slow down.',
+});
+
 // Export both grouped and individual limiters for flexibility
 module.exports = {
   rateLimiter: {
@@ -144,6 +155,7 @@ module.exports = {
     chatbot,
     admin,
     webhook,
+    message,
   },
   // Individual exports for direct use in routes
   generalLimiter: general,
@@ -153,4 +165,5 @@ module.exports = {
   chatbotLimiter: chatbot,
   adminLimiter: admin,
   webhookLimiter: webhook,
+  messageLimiter: message,
 };

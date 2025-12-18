@@ -185,6 +185,7 @@ class AdminController {
 
       const updateData = {
         verification_status: status,
+        is_verified: status === 'verified',
         verified_at: status === 'verified' ? new Date().toISOString() : null,
         rejection_reason: status === 'rejected' ? rejection_reason : null,
         updated_at: new Date().toISOString(),

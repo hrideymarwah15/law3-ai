@@ -30,6 +30,7 @@ const reviewRoutes = require('./routes/review.routes');
 const caseRoutes = require('./routes/case.routes');
 const reminderRoutes = require('./routes/reminder.routes');
 const chatbotRoutes = require('./routes/chatbot.routes');
+const chatRoutes = require('./routes/chat.routes');
 const adminRoutes = require('./routes/admin.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const healthRoutes = require('./routes/health.routes');
@@ -208,6 +209,7 @@ apiRouter.use('/reviews', reviewRoutes);
 apiRouter.use('/cases', caseRoutes);
 apiRouter.use('/reminders', reminderRoutes);
 apiRouter.use('/chatbot', chatbotRoutes);
+apiRouter.use('/chat', chatRoutes);
 apiRouter.use('/admin', adminRoutes);
 
 app.use('/api/v1', apiRouter);
@@ -226,6 +228,10 @@ app.use(errorHandler);
 // Import graceful shutdown handler
 const { gracefulShutdown, registerDefaultCleanups } = require('./utils/gracefulShutdown');
 
+// Import Socket.io
+const { initializeSocketServer } = require('./socket');
+const http = require('http');
+
 // Register default cleanup handlers
 registerDefaultCleanups();
 
@@ -241,13 +247,22 @@ const startServer = async () => {
     container.initialize();
     logger.info('Service container initialized');
 
+    // Create HTTP server
+    const server = http.createServer(app);
+
+    // Initialize Socket.io
+    const io = await initializeSocketServer(server);
+    app.set('io', io);
+    logger.info('Socket.io server initialized');
+
     // Start HTTP server
-    const server = app.listen(PORT, () => {
+    server.listen(PORT, () => {
       logger.info(`🚀 Nyaay Saathi API server running on port ${PORT}`);
       logger.info(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`🔗 API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
       logger.info(`📊 Request timeout: 30s`);
       logger.info(`🔒 Security middleware: enabled`);
+      logger.info(`💬 WebSocket: enabled`);
     });
 
     // Configure keep-alive timeouts

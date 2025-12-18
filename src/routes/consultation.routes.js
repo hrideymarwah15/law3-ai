@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const consultationController = require('../controllers/consultation.controller');
-const { supabaseAuthMiddleware, roleMiddleware } = require('../middleware/auth');
+const { supabaseAuthMiddleware, roleMiddleware, verifiedLawyerMiddleware } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -41,9 +41,11 @@ router.put(
   asyncHandler(consultationController.cancel)
 );
 
+// Only verified lawyers can complete consultations
 router.put(
   '/:consultation_id/complete',
   roleMiddleware('lawyer', 'admin'),
+  verifiedLawyerMiddleware,
   validate(completeConsultationSchema),
   asyncHandler(consultationController.complete)
 );

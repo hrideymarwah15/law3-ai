@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const lawyerController = require('../controllers/lawyer.controller');
-const { supabaseAuthMiddleware, optionalAuthMiddleware, roleMiddleware } = require('../middleware/auth');
+const { supabaseAuthMiddleware, optionalAuthMiddleware, roleMiddleware, verifiedLawyerMiddleware } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { rateLimiter } = require('../middleware/rateLimiter');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -37,11 +37,12 @@ router.get(
   asyncHandler(lawyerController.getAvailability)
 );
 
-// Protected routes (for lawyers)
+// Protected routes (for verified lawyers only)
 router.post(
   '/availability',
   supabaseAuthMiddleware,
   roleMiddleware('lawyer', 'admin'),
+  verifiedLawyerMiddleware,
   validate(updateAvailabilitySchema),
   asyncHandler(lawyerController.setAvailability)
 );
