@@ -1,0 +1,2343 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project_specification>
+  <project_info>
+    <name>Nyaay Saathi - Legal Platform MVP Backend</name>
+    <version>1.0.0 (MVP)</version>
+    <description>Backend API for legal consultation and case management platform for the Indian market.</description>
+    <tech_stack>
+      <language>Node.js with Express.js</language>
+      <database>Supabase PostgreSQL</database>
+      <orm>Supabase Client (@supabase/supabase-js)</orm>
+      <authentication>Supabase Auth (OAuth, Email, Phone OTP)</authentication>
+      <file_storage>Supabase Storage</file_storage>
+      <realtime>Supabase Realtime (for notifications)</realtime>
+      <payment>Razorpay API (INR)</payment>
+      <sms>Twilio or MSG91 (for reminders only)</sms>
+      <video>Google Meet API (via Calendar)</video>
+    </tech_stack>
+    <timeline>3 months</timeline>
+    <team_size>2 backend developers</team_size>
+  </project_info>
+
+  <architecture>
+    <pattern>RESTful API with MVC architecture</pattern>
+    <api_versioning>
+      <strategy>URL Path Versioning (/api/v1/, /api/v2/)</strategy>
+      <current_version>v1</current_version>
+      <deprecation_policy>
+        <notice_period>6 months before deprecation</notice_period>
+        <sunset_header>Include Sunset header with deprecation date</sunset_header>
+        <documentation>Maintain docs for deprecated versions until sunset</documentation>
+      </deprecation_policy>
+      <version_compatibility>
+        <backward_compatible_changes>New optional fields, new endpoints</backward_compatible_changes>
+        <breaking_changes_require_new_version>Required field changes, response structure changes, removed endpoints</breaking_changes_require_new_version>
+      </version_compatibility>
+      <api_changelog>
+        <location>/api/changelog</location>
+        <format>JSON with version, date, changes array</format>
+      </api_changelog>
+    </api_versioning>
+    <folder_structure>
+      <root>
+        <config>Database, environment, third-party configs</config>
+        <controllers>Business logic handlers</controllers>
+        <models>Database schemas (ORM definitions)</models>
+        <routes>API endpoints</routes>
+        <middleware>Auth, validation, error handling</middleware>
+        <services>Third-party integrations</services>
+        <utils>Helper functions</utils>
+        <validators>Input validation schemas (Joi/Express-validator)</validators>
+      </root>
+    </folder_structure>
+  </architecture>
+
+  <database_schema>
+
+    <!-- USERS TABLE -->
+    <table name="users">
+      <description>Store user account information (synced with Supabase Auth)</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" comment="References auth.users.id"/>
+        <column name="phone" type="VARCHAR(15)" unique="true" nullable="true" indexed="true"/>
+        <column name="name" type="VARCHAR(100)" required="true"/>
+        <column name="email" type="VARCHAR(100)" unique="true" nullable="true"/>
+        <column name="avatar_url" type="TEXT" nullable="true"/>
+        <column name="city" type="VARCHAR(50)" nullable="true"/>
+        <column name="language_preference" type="ENUM('english', 'hindi')" default="english"/>
+        <column name="role" type="ENUM('user', 'lawyer', 'admin')" default="user"/>
+        <column name="is_verified" type="BOOLEAN" default="false"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="phone"/>
+        <index columns="email"/>
+        <index columns="role"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can view own profile" action="SELECT" using="auth.uid() = id"/>
+        <policy name="Users can update own profile" action="UPDATE" using="auth.uid() = id"/>
+        <policy name="Admins can view all users" action="SELECT" using="is_admin()"/>
+      </rls_policies>
+      <triggers>
+        <trigger name="on_auth_user_created" event="AFTER INSERT ON auth.users">
+          Create corresponding public.users record with id = auth.users.id
+        </trigger>
+      </triggers>
+    </table>
+
+    <!-- LAWYERS TABLE -->
+    <table name="lawyers">
+      <description>Store lawyer profile and credentials (One-to-One with users)</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true" unique="true"/>
+        <column name="bar_council_number" type="VARCHAR(50)" unique="true" required="true"/>
+        <column name="specialization" type="ENUM('criminal', 'civil', 'family', 'property', 'corporate', 'other')" required="true"/>
+        <column name="experience_years" type="INTEGER" required="true"/>
+        <column name="consultation_fee" type="DECIMAL(10,2)" required="true" comment="Fee for 30 min consultation"/>
+        <column name="profile_photo_url" type="TEXT" nullable="true" comment="Supabase Storage URL"/>
+        <column name="bar_certificate_url" type="TEXT" required="true" comment="Supabase Storage URL"/>
+        <column name="id_proof_url" type="TEXT" required="true" comment="Supabase Storage URL"/>
+        <column name="bio" type="TEXT" nullable="true" comment="Short description max 500 chars"/>
+        <column name="is_verified" type="BOOLEAN" default="false"/>
+        <column name="is_available" type="BOOLEAN" default="true"/>
+        <column name="rating" type="DECIMAL(3,2)" default="0.00" comment="Average rating 0-5"/>
+        <column name="total_reviews" type="INTEGER" default="0"/>
+        <column name="total_consultations" type="INTEGER" default="0"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="user_id"/>
+        <index columns="specialization"/>
+        <index columns="rating"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Anyone can view verified lawyers" action="SELECT" using="is_verified = true"/>
+        <policy name="Lawyers can update own profile" action="UPDATE" using="auth.uid() = user_id"/>
+        <policy name="Admins can manage all lawyers" action="ALL" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+    <!-- LAWYER AVAILABILITY TABLE -->
+    <table name="lawyer_availability">
+      <description>Weekly availability schedule for lawyers</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="lawyer_id" type="UUID" foreign_key="lawyers.id" required="true"/>
+        <column name="day_of_week" type="ENUM('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')" required="true"/>
+        <column name="start_time" type="TIME" required="true" comment="Format: HH:MM:SS"/>
+        <column name="end_time" type="TIME" required="true"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="lawyer_id, day_of_week"/>
+      </indexes>
+      <constraints>
+        <unique>lawyer_id + day_of_week + start_time</unique>
+      </constraints>
+      <rls_policies>
+        <policy name="Anyone can view availability" action="SELECT" using="true"/>
+        <policy name="Lawyers can manage own availability" action="ALL" using="lawyer_id IN (SELECT id FROM lawyers WHERE user_id = auth.uid())"/>
+      </rls_policies>
+    </table>
+
+    <!-- CONSULTATIONS TABLE -->
+    <table name="consultations">
+      <description>Store consultation booking details</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true"/>
+        <column name="lawyer_id" type="UUID" foreign_key="lawyers.id" required="true"/>
+        <column name="booking_date" type="DATE" required="true"/>
+        <column name="booking_time" type="TIME" required="true"/>
+        <column name="duration_minutes" type="INTEGER" default="30"/>
+        <column name="problem_description" type="TEXT" required="true"/>
+        <column name="consultation_type" type="ENUM('video')" default="video" comment="MVP: video only"/>
+        <column name="status" type="ENUM('pending', 'confirmed', 'completed', 'cancelled', 'no_show')" default="pending"/>
+        <column name="meeting_link" type="TEXT" nullable="true" comment="Google Meet link"/>
+        <column name="amount" type="DECIMAL(10,2)" required="true"/>
+        <column name="payment_id" type="UUID" foreign_key="payments.id" nullable="true"/>
+        <column name="payment_status" type="ENUM('pending', 'completed', 'failed', 'refunded')" default="pending"/>
+        <column name="notes" type="TEXT" nullable="true" comment="Post-consultation notes"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="user_id"/>
+        <index columns="lawyer_id"/>
+        <index columns="status"/>
+        <index columns="booking_date"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can view own consultations" action="SELECT" using="auth.uid() = user_id"/>
+        <policy name="Lawyers can view their consultations" action="SELECT" using="lawyer_id IN (SELECT id FROM lawyers WHERE user_id = auth.uid())"/>
+        <policy name="Users can create consultations" action="INSERT" with_check="auth.uid() = user_id"/>
+        <policy name="Admins can manage all consultations" action="ALL" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+    <!-- PAYMENTS TABLE -->
+    <table name="payments">
+      <description>Store payment transaction details (Razorpay)</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true"/>
+        <column name="consultation_id" type="UUID" foreign_key="consultations.id" nullable="true"/>
+        <column name="amount" type="DECIMAL(10,2)" required="true"/>
+        <column name="currency" type="VARCHAR(3)" default="INR"/>
+        <column name="payment_method" type="ENUM('upi', 'card', 'netbanking', 'wallet')" nullable="true" comment="Method used in final payment"/>
+        <column name="razorpay_order_id" type="VARCHAR(100)" unique="true" nullable="true"/>
+        <column name="razorpay_payment_id" type="VARCHAR(100)" unique="true" nullable="true"/>
+        <column name="razorpay_signature" type="VARCHAR(255)" nullable="true"/>
+        <column name="status" type="ENUM('initiated', 'pending', 'success', 'failed', 'refunded')" default="initiated"/>
+        <column name="failure_reason" type="TEXT" nullable="true"/>
+        <column name="refund_amount" type="DECIMAL(10,2)" default="0.00"/>
+        <column name="refund_date" type="TIMESTAMP" nullable="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="user_id"/>
+        <index columns="consultation_id"/>
+        <index columns="status"/>
+        <index columns="razorpay_order_id"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can view own payments" action="SELECT" using="auth.uid() = user_id"/>
+        <policy name="Admins can view all payments" action="SELECT" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+    <!-- REVIEWS TABLE -->
+    <table name="reviews">
+      <description>Store user reviews for lawyers</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="consultation_id" type="UUID" foreign_key="consultations.id" required="true" unique="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true"/>
+        <column name="lawyer_id" type="UUID" foreign_key="lawyers.id" required="true"/>
+        <column name="rating" type="INTEGER" required="true" comment="1 to 5 stars"/>
+        <column name="review_text" type="TEXT" nullable="true" comment="Max 200 characters"/>
+        <column name="is_verified" type="BOOLEAN" default="true" comment="From actual consultation"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="lawyer_id"/>
+        <index columns="user_id"/>
+      </indexes>
+      <constraints>
+        <check><![CDATA[rating >= 1 AND rating <= 5]]></check>
+      </constraints>
+      <rls_policies>
+        <policy name="Anyone can view reviews" action="SELECT" using="true"/>
+        <policy name="Users can create reviews for completed consultations" action="INSERT" with_check="auth.uid() = user_id"/>
+      </rls_policies>
+    </table>
+
+    <!-- CASES TABLE -->
+    <table name="cases">
+      <description>Store user court case details (manual entry)</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true"/>
+        <column name="case_title" type="VARCHAR(200)" required="true"/>
+        <column name="case_number" type="VARCHAR(100)" nullable="true"/>
+        <column name="court_name" type="VARCHAR(200)" required="true"/>
+        <column name="case_type" type="ENUM('criminal', 'civil', 'family', 'property', 'other')" required="true"/>
+        <column name="next_hearing_date" type="DATE" nullable="true"/>
+        <column name="lawyer_name" type="VARCHAR(100)" nullable="true"/>
+        <column name="status" type="ENUM('active', 'closed', 'pending')" default="active"/>
+        <column name="notes" type="TEXT" nullable="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="user_id"/>
+        <index columns="next_hearing_date"/>
+        <index columns="status"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can manage own cases" action="ALL" using="auth.uid() = user_id"/>
+        <policy name="Admins can view all cases" action="SELECT" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+    <!-- REMINDERS TABLE -->
+    <table name="reminders">
+      <description>Store SMS reminders for hearing dates</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="case_id" type="UUID" foreign_key="cases.id" required="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" required="true"/>
+        <column name="reminder_date" type="DATE" required="true"/>
+        <column name="reminder_time" type="TIME" required="true"/>
+        <column name="message" type="TEXT" required="true"/>
+        <column name="status" type="ENUM('pending', 'sent', 'failed')" default="pending"/>
+        <column name="sent_at" type="TIMESTAMP" nullable="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="user_id"/>
+        <index columns="reminder_date"/>
+        <index columns="status"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can manage own reminders" action="ALL" using="auth.uid() = user_id"/>
+      </rls_policies>
+    </table>
+
+    <!-- CHATBOT INTERACTIONS TABLE -->
+    <table name="chatbot_interactions">
+      <description>Log chatbot queries and responses</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="user_id" type="UUID" foreign_key="users.id" nullable="true" comment="Null if not logged in"/>
+        <column name="session_id" type="VARCHAR(100)" required="true" comment="For anonymous users"/>
+        <column name="query" type="TEXT" required="true"/>
+        <column name="response" type="TEXT" required="true"/>
+        <column name="language" type="ENUM('english', 'hindi')" required="true"/>
+        <column name="intent" type="VARCHAR(100)" nullable="true" comment="Detected intent"/>
+        <column name="confidence_score" type="DECIMAL(3,2)" nullable="true"/>
+        <column name="created_at" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="session_id"/>
+        <index columns="user_id"/>
+        <index columns="created_at"/>
+      </indexes>
+      <rls_policies>
+        <policy name="Users can view own chat history" action="SELECT" using="auth.uid() = user_id"/>
+        <policy name="Anonymous users can insert" action="INSERT" with_check="true"/>
+        <policy name="Admins can view all interactions" action="SELECT" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+    <!-- DATABASE INDEXES & OPTIMIZATION -->
+    <database_optimization>
+      <composite_indexes>
+        <index table="consultations" columns="lawyer_id, booking_date, status" comment="Optimizes lawyer schedule queries"/>
+        <index table="consultations" columns="user_id, created_at DESC" comment="User consultation history"/>
+        <index table="consultations" columns="status, booking_date" comment="Admin dashboard queries"/>
+        <index table="payments" columns="status, created_at DESC" comment="Payment reconciliation"/>
+        <index table="reviews" columns="lawyer_id, created_at DESC" comment="Lawyer review pagination"/>
+        <index table="chatbot_interactions" columns="session_id, created_at DESC" comment="Chat history retrieval"/>
+        <index table="cases" columns="user_id, status, next_hearing_date" comment="Case dashboard queries"/>
+        <index table="reminders" columns="status, reminder_date, reminder_time" comment="Scheduled job queries"/>
+      </composite_indexes>
+      <partial_indexes>
+        <index table="lawyers" columns="specialization, rating DESC" where="is_verified = true AND is_available = true" comment="Active lawyer search"/>
+        <index table="consultations" columns="booking_date, booking_time" where="status IN ('pending', 'confirmed')" comment="Slot availability check"/>
+        <index table="reminders" columns="reminder_date, reminder_time" where="status = 'pending'" comment="Pending reminders job"/>
+      </partial_indexes>
+      <materialized_views>
+        <view name="lawyer_search_mv">
+          <description>Pre-computed view for fast lawyer search with user and review data</description>
+          <refresh_interval>5 minutes</refresh_interval>
+          <columns>lawyer_id, name, specialization, city, rating, total_reviews, consultation_fee, is_available, profile_photo_url</columns>
+        </view>
+        <view name="admin_dashboard_stats_mv">
+          <description>Pre-aggregated dashboard statistics</description>
+          <refresh_interval>15 minutes</refresh_interval>
+          <columns>total_users, total_lawyers, pending_verifications, consultations_today, revenue_today, revenue_month</columns>
+        </view>
+      </materialized_views>
+      <query_optimization>
+        <connection_pooling>
+          <mode>transaction</mode>
+          <pool_size>15</pool_size>
+          <idle_timeout>30000</idle_timeout>
+        </connection_pooling>
+        <prepared_statements>Enable for frequently executed queries</prepared_statements>
+        <query_timeout>30 seconds (configurable per query)</query_timeout>
+        <statement_timeout>60 seconds (global safety limit)</statement_timeout>
+      </query_optimization>
+    </database_optimization>
+
+    <!-- SUPABASE STORAGE BUCKETS -->
+    <storage_buckets>
+      <bucket name="lawyer-documents">
+        <description>Private bucket for lawyer verification documents</description>
+        <public>false</public>
+        <file_size_limit>10MB</file_size_limit>
+        <allowed_mime_types>image/jpeg, image/png, application/pdf</allowed_mime_types>
+        <policies>
+          <policy name="Lawyers can upload own documents" action="INSERT" using="auth.uid() IN (SELECT user_id FROM lawyers)"/>
+          <policy name="Admins can view all documents" action="SELECT" using="is_admin()"/>
+        </policies>
+      </bucket>
+      <bucket name="profile-photos">
+        <description>Public bucket for profile photos</description>
+        <public>true</public>
+        <file_size_limit>5MB</file_size_limit>
+        <allowed_mime_types>image/jpeg, image/png, image/webp</allowed_mime_types>
+        <policies>
+          <policy name="Users can upload own photos" action="INSERT" using="auth.uid()::text = (storage.foldername(name))[1]"/>
+          <policy name="Users can update own photos" action="UPDATE" using="auth.uid()::text = (storage.foldername(name))[1]"/>
+        </policies>
+      </bucket>
+    </storage_buckets>
+
+    <!-- SUPABASE DATABASE FUNCTIONS -->
+    <database_functions>
+      <function name="is_admin">
+        <returns>BOOLEAN</returns>
+        <body>
+          RETURN EXISTS (
+            SELECT 1 FROM public.users 
+            WHERE id = auth.uid() AND role = 'admin'
+          );
+        </body>
+      </function>
+      <function name="handle_new_user">
+        <trigger>AFTER INSERT ON auth.users</trigger>
+        <body>
+          INSERT INTO public.users (id, email, phone, name, created_at, updated_at)
+          VALUES (
+            NEW.id,
+            NEW.email,
+            NEW.phone,
+            COALESCE(NEW.raw_user_meta_data->>'name', 'User'),
+            NOW(),
+            NOW()
+          );
+          RETURN NEW;
+        </body>
+      </function>
+      <function name="update_lawyer_rating">
+        <trigger>AFTER INSERT OR UPDATE ON reviews</trigger>
+        <body>
+          UPDATE lawyers SET
+            rating = (SELECT AVG(rating) FROM reviews WHERE lawyer_id = NEW.lawyer_id),
+            total_reviews = (SELECT COUNT(*) FROM reviews WHERE lawyer_id = NEW.lawyer_id),
+            updated_at = NOW()
+          WHERE id = NEW.lawyer_id;
+          RETURN NEW;
+        </body>
+      </function>
+      <function name="audit_log_trigger">
+        <description>Track all data changes for compliance and debugging</description>
+        <trigger>AFTER INSERT OR UPDATE OR DELETE ON [sensitive_tables]</trigger>
+        <body>
+          INSERT INTO audit_logs (table_name, record_id, action, old_data, new_data, user_id, ip_address, timestamp)
+          VALUES (
+            TG_TABLE_NAME,
+            COALESCE(NEW.id, OLD.id),
+            TG_OP,
+            CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN row_to_json(OLD) ELSE NULL END,
+            CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN row_to_json(NEW) ELSE NULL END,
+            auth.uid(),
+            current_setting('request.headers', true)::json->>'x-forwarded-for',
+            NOW()
+          );
+          RETURN COALESCE(NEW, OLD);
+        </body>
+      </function>
+      <function name="soft_delete">
+        <description>Soft delete pattern - set deleted_at instead of actual delete</description>
+        <trigger>BEFORE DELETE ON [tables_with_soft_delete]</trigger>
+        <body>
+          UPDATE [table_name] SET deleted_at = NOW(), updated_at = NOW() WHERE id = OLD.id;
+          RETURN NULL; -- Prevents actual deletion
+        </body>
+      </function>
+      <function name="set_updated_at">
+        <description>Automatically update updated_at on any row change</description>
+        <trigger>BEFORE UPDATE ON [all_tables]</trigger>
+        <body>
+          NEW.updated_at = NOW();
+          RETURN NEW;
+        </body>
+      </function>
+      <function name="check_slot_availability">
+        <description>Validate slot is available before booking</description>
+        <returns>BOOLEAN</returns>
+        <parameters>p_lawyer_id UUID, p_date DATE, p_time TIME</parameters>
+        <body>
+          RETURN NOT EXISTS (
+            SELECT 1 FROM consultations
+            WHERE lawyer_id = p_lawyer_id
+              AND booking_date = p_date
+              AND booking_time = p_time
+              AND status IN ('pending', 'confirmed')
+          );
+        </body>
+      </function>
+      <function name="get_lawyer_stats">
+        <description>Get aggregated stats for lawyer dashboard</description>
+        <returns>JSON</returns>
+        <parameters>p_lawyer_id UUID</parameters>
+        <body>
+          SELECT json_build_object(
+            'total_consultations', COUNT(*) FILTER (WHERE status = 'completed'),
+            'pending_consultations', COUNT(*) FILTER (WHERE status = 'confirmed'),
+            'total_revenue', SUM(amount) FILTER (WHERE payment_status = 'completed'),
+            'avg_rating', (SELECT rating FROM lawyers WHERE id = p_lawyer_id),
+            'this_month_consultations', COUNT(*) FILTER (WHERE booking_date >= date_trunc('month', CURRENT_DATE))
+          ) FROM consultations WHERE lawyer_id = p_lawyer_id;
+        </body>
+      </function>
+    </database_functions>
+
+    <!-- AUDIT LOGS TABLE -->
+    <table name="audit_logs">
+      <description>Track all data changes for compliance and debugging</description>
+      <columns>
+        <column name="id" type="UUID" primary_key="true" auto_generated="true"/>
+        <column name="table_name" type="VARCHAR(50)" required="true"/>
+        <column name="record_id" type="UUID" required="true"/>
+        <column name="action" type="ENUM('INSERT', 'UPDATE', 'DELETE')" required="true"/>
+        <column name="old_data" type="JSONB" nullable="true"/>
+        <column name="new_data" type="JSONB" nullable="true"/>
+        <column name="user_id" type="UUID" nullable="true"/>
+        <column name="ip_address" type="INET" nullable="true"/>
+        <column name="user_agent" type="TEXT" nullable="true"/>
+        <column name="timestamp" type="TIMESTAMP" default="NOW()"/>
+      </columns>
+      <indexes>
+        <index columns="table_name, record_id"/>
+        <index columns="user_id"/>
+        <index columns="timestamp DESC"/>
+        <index columns="action"/>
+      </indexes>
+      <retention_policy>90 days (archive to cold storage after)</retention_policy>
+      <rls_policies>
+        <policy name="Only admins can view audit logs" action="SELECT" using="is_admin()"/>
+      </rls_policies>
+    </table>
+
+  </database_schema>
+
+  <api_endpoints>
+
+    <!-- AUTHENTICATION APIs (Supabase Auth) -->
+    <module name="authentication">
+      <base_url>/api/v1/auth</base_url>
+      <provider>Supabase Auth</provider>
+      <description>Authentication is handled by Supabase Auth. Frontend uses Supabase Auth UI or custom forms. Backend verifies JWT tokens from Supabase.</description>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/signup</path>
+        <description>Register a new user with email/phone and password</description>
+        <request_body>
+          { "email": "string (optional)", "phone": "string (optional, with country code)", "password": "string (required, min 6 chars)", "name": "string (required)", "signup_method": "string (email|phone)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Verification sent", "user": { "id": "uuid", "email": "string", "phone": "string" } }
+        </response_success>
+        <logic>
+          - Call supabase.auth.signUp() with email/phone and password
+          - For email: sends confirmation email automatically
+          - For phone: sends OTP via Supabase's SMS provider
+          - User record auto-created in public.users via database trigger
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/signin</path>
+        <description>Sign in with email/phone and password</description>
+        <request_body>
+          { "email": "string (optional)", "phone": "string (optional)", "password": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "session": { "access_token": "string", "refresh_token": "string", "expires_at": "timestamp" }, "user": { "id": "uuid", "email": "string", "role": "string" } }
+        </response_success>
+        <logic>
+          - Call supabase.auth.signInWithPassword()
+          - Return session tokens for frontend storage
+          - Fetch user profile from public.users table
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/signin/otp</path>
+        <description>Sign in with phone OTP (passwordless)</description>
+        <request_body>
+          { "phone": "string (required, with country code)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "OTP sent to phone" }
+        </response_success>
+        <logic>
+          - Call supabase.auth.signInWithOtp({ phone })
+          - Supabase sends OTP via configured SMS provider
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/verify-otp</path>
+        <description>Verify phone OTP and complete sign in</description>
+        <request_body>
+          { "phone": "string (required)", "token": "string (required, 6-digit OTP)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "session": { "access_token": "string", "refresh_token": "string" }, "user": { "user object" } }
+        </response_success>
+        <logic>
+          - Call supabase.auth.verifyOtp({ phone, token, type: 'sms' })
+          - Return session on successful verification
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/signin/oauth</path>
+        <description>Initiate OAuth sign in (Google)</description>
+        <request_body>
+          { "provider": "string (google)", "redirect_url": "string (frontend callback URL)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "url": "string (OAuth authorization URL)" }
+        </response_success>
+        <logic>
+          - Call supabase.auth.signInWithOAuth({ provider, options: { redirectTo } })
+          - Return OAuth URL for frontend redirect
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/signout</path>
+        <description>Sign out current user</description>
+        <authentication>Required</authentication>
+        <response_success status="200">
+          { "success": true, "message": "Signed out successfully" }
+        </response_success>
+        <logic>
+          - Call supabase.auth.signOut()
+          - Invalidate session tokens
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/refresh</path>
+        <description>Refresh access token using refresh token</description>
+        <request_body>
+          { "refresh_token": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "session": { "access_token": "string", "refresh_token": "string", "expires_at": "timestamp" } }
+        </response_success>
+        <logic>
+          - Call supabase.auth.refreshSession({ refresh_token })
+          - Return new session tokens
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/me</path>
+        <description>Get current authenticated user profile</description>
+        <authentication>Required (Bearer token)</authentication>
+        <response_success status="200">
+          { "success": true, "user": { "id": "uuid", "phone": "string", "name": "string", "email": "string", "role": "string", "is_verified": true, "city": "string", "language_preference": "string" } }
+        </response_success>
+        <logic>
+          - Extract user from JWT token via supabase.auth.getUser()
+          - Fetch full profile from public.users table
+          - Return combined auth and profile data
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/forgot-password</path>
+        <description>Send password reset email</description>
+        <request_body>
+          { "email": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Password reset email sent" }
+        </response_success>
+        <logic>
+          - Call supabase.auth.resetPasswordForEmail(email, { redirectTo })
+          - Supabase sends reset link to email
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/reset-password</path>
+        <description>Reset password with token from email</description>
+        <authentication>Required (from reset link session)</authentication>
+        <request_body>
+          { "new_password": "string (required, min 6 chars)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Password updated successfully" }
+        </response_success>
+        <logic>
+          - Call supabase.auth.updateUser({ password: new_password })
+          - User must be authenticated via reset link
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/complete-profile</path>
+        <description>Complete user profile after signup (first login)</description>
+        <authentication>Required</authentication>
+        <request_body>
+          { "name": "string (optional)", "city": "string (optional)", "language_preference": "string (optional, enum: english|hindi)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Profile completed", "user": { "user object" } }
+        </response_success>
+        <logic>
+          - Update public.users record with additional profile fields
+          - Uses RLS policy - user can only update own profile
+        </logic>
+      </endpoint>
+
+    </module>
+
+    <!-- SUPABASE AUTH CONFIGURATION -->
+    <supabase_auth_config>
+      <sign_in_methods>
+        <method>Email + Password</method>
+        <method>Phone OTP (via Twilio/MessageBird configured in Supabase)</method>
+        <method>Google OAuth</method>
+        <method>Magic Link (optional)</method>
+      </sign_in_methods>
+      <jwt_settings>
+        <jwt_expiry>3600 (1 hour, configurable)</jwt_expiry>
+        <jwt_secret>Managed by Supabase</jwt_secret>
+        <custom_claims>
+          <claim>role (user, lawyer, admin)</claim>
+          <claim>is_verified</claim>
+          <claim>permissions[]</claim>
+        </custom_claims>
+      </jwt_settings>
+      <email_templates>
+        <template>Confirmation email</template>
+        <template>Password reset email</template>
+        <template>Magic link email</template>
+      </email_templates>
+      <sms_provider>
+        <provider>Twilio (configured in Supabase Dashboard)</provider>
+        <otp_expiry>60 seconds</otp_expiry>
+      </sms_provider>
+      <oauth_providers>
+        <provider name="google">
+          <client_id>Configure in Supabase Dashboard</client_id>
+          <redirect_url>https://[project-ref].supabase.co/auth/v1/callback</redirect_url>
+        </provider>
+      </oauth_providers>
+      <advanced_security>
+        <device_tracking>
+          <enabled>true</enabled>
+          <store>Track device fingerprint, IP, user agent per session</store>
+          <alert_on_new_device>Email notification for new device login</alert_on_new_device>
+        </device_tracking>
+        <session_management>
+          <max_concurrent_sessions>5</max_concurrent_sessions>
+          <session_timeout_inactive>30 minutes</session_timeout_inactive>
+          <absolute_session_timeout>24 hours</absolute_session_timeout>
+          <force_logout_on_password_change>true</force_logout_on_password_change>
+        </session_management>
+        <brute_force_protection>
+          <max_login_attempts>5 in 15 minutes</max_login_attempts>
+          <lockout_duration>30 minutes</lockout_duration>
+          <captcha_after_failed_attempts>3</captcha_after_failed_attempts>
+          <ip_reputation_check>Block known malicious IPs</ip_reputation_check>
+        </brute_force_protection>
+        <suspicious_activity_detection>
+          <impossible_travel>Alert on login from geographically impossible location</impossible_travel>
+          <multiple_failed_otp>Lock account after 5 failed OTP attempts</multiple_failed_otp>
+          <account_enumeration_prevention>Same response for existing/non-existing accounts</account_enumeration_prevention>
+        </suspicious_activity_detection>
+      </advanced_security>
+      <frontend_integration>
+        <library>@supabase/supabase-js</library>
+        <auth_ui>@supabase/auth-ui-react (optional)</auth_ui>
+        <session_storage>localStorage or secure cookies</session_storage>
+      </frontend_integration>
+    </supabase_auth_config>
+
+    <!-- USER PROFILE APIs -->
+    <module name="user">
+      <base_url>/api/v1/user</base_url>
+      <authentication>Required for all endpoints</authentication>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/profile</path>
+        <description>Get current user profile</description>
+        <response_success status="200">
+          { "success": true, "user": { "id": "uuid", "phone": "string", "name": "string", "email": "string", "city": "string", "language_preference": "string", "created_at": "timestamp" } }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/profile</path>
+        <description>Update user profile</description>
+        <request_body>
+          { "name": "string (optional)", "email": "string (optional)", "city": "string (optional)", "language_preference": "string (optional)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Profile updated successfully", "user": { "updated user object" } }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/change-password</path>
+        <description>Change user password</description>
+        <request_body>
+          { "current_password": "string (required)", "new_password": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Password changed successfully" }
+        </response_success>
+        <validation>
+          - Verify current password using bcrypt
+          - Validate new password strength
+          - Hash and update
+        </validation>
+      </endpoint>
+
+    </module>
+
+    <!-- CHATBOT APIs -->
+    <module name="chatbot">
+      <base_url>/api/v1/chatbot</base_url>
+      <authentication>Optional (works for anonymous users)</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/query</path>
+        <description>Send query to chatbot</description>
+        <request_body>
+          { "query": "string (required, max 5000 chars)", "language": "string (required, enum: english|hindi)", "session_id": "string (required for anonymous)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "response": "string (chatbot answer)", "intent": "string", "confidence": 0.85, "suggestions": [ "Talk to a lawyer", "Calculate costs", "Add my case" ] }
+        </response_success>
+        <logic>
+          - Use Gemini API for natural language understanding and response generation
+          - Send query with legal context prompt to Gemini
+          - Parse Gemini response to extract intent and generate contextual answer
+          - Log interaction in database (chatbot_interactions)
+          - Return related actions as suggestions
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/cost-estimate</path>
+        <description>Calculate legal cost estimate</description>
+        <request_body>
+          { "case_type": "string (required, enum: criminal|civil|family|property)", "city": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "estimate": { "lawyer_fee_min": 30000, "lawyer_fee_max": 50000, "court_fees": 5000, "documentation": 3000, "total_min": 38000, "total_max": 58000, "currency": "INR" } }
+        </response_success>
+        <logic>
+          - Use predefined cost matrix
+          - Factor in city (tier 1/2/3) and case type complexity
+          - Return range not fixed amount
+        </logic>
+      </endpoint>
+
+    </module>
+
+    <!-- LAWYER APIs -->
+    <module name="lawyers">
+      <base_url>/api/v1/lawyers</base_url>
+      <authentication>Required for booking, optional for search/view</authentication>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/search</path>
+        <description>Search and filter verified lawyers</description>
+        <query_params>
+          { "specialization": "string (optional)", "city": "string (optional)", "min_price": "number (optional)", "max_price": "number (optional)", "min_rating": "number (optional, 1-5)", "page": "number (default: 1)", "limit": "number (default: 10, max: 50)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "total": 45, "page": 1, "limit": 10, "lawyers": [ { "id": "uuid", "name": "string", "profile_photo_url": "string", "specialization": "string", "experience_years": 8, "consultation_fee": 1000, "rating": 4.5, "total_reviews": 23, "city": "string", "is_available": true } ] }
+        </response_success>
+        <logic>
+          - Filter by query parameters and `is_verified=true`
+          - Paginate results (limit, offset)
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/:lawyer_id</path>
+        <description>Get lawyer profile details</description>
+        <response_success status="200">
+          { "success": true, "lawyer": { "id": "uuid", "name": "string", "specialization": "string", "consultation_fee": 1000, "bio": "string", "rating": 4.5, "total_reviews": 23, "city": "string", "reviews": [ { "id": "uuid", "user_name": "string", "rating": 5, "review_text": "string" } ] } }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/:lawyer_id/availability</path>
+        <description>Get lawyer's available time slots</description>
+        <query_params>
+          { "date": "string (required, format: YYYY-MM-DD)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "date": "2025-01-15", "available_slots": [ { "start_time": "10:00", "end_time": "10:30", "is_available": true }, { "start_time": "10:30", "end_time": "11:00", "is_available": false } ] }
+        </response_success>
+        <logic>
+          - Check lawyer's weekly schedule for `date`'s day-of-week.
+          - Generate 30-min slots based on schedule.
+          - Mark slots as unavailable if booked in `consultations` table with status 'confirmed' or 'pending'.
+        </logic>
+      </endpoint>
+
+    </module>
+
+    <!-- CONSULTATION APIs -->
+    <module name="consultations">
+      <base_url>/api/v1/consultations</base_url>
+      <authentication>Required</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/book</path>
+        <description>Book a consultation with lawyer (pre-payment)</description>
+        <request_body>
+          { "lawyer_id": "uuid (required)", "booking_date": "string (required, format: YYYY-MM-DD)", "booking_time": "string (required, format: HH:MM)", "problem_description": "string (required, max 1000 chars)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Booking created successfully", "consultation": { "id": "uuid", "amount": 1000, "status": "pending", "payment_order_id": "string (Razorpay order ID)" } }
+        </response_success>
+        <logic>
+          - Validate lawyer is available and slot is open.
+          - Create consultation record (status: pending, payment_status: pending).
+          - Create Razorpay order via PaymentService.
+          - Return order ID for frontend payment process.
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/:consultation_id/confirm-payment</path>
+        <description>Confirm payment after Razorpay success callback</description>
+        <request_body>
+          { "razorpay_payment_id": "string (required)", "razorpay_order_id": "string (required)", "razorpay_signature": "string (required)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Payment confirmed, consultation booked", "consultation": { "id": "uuid", "status": "confirmed", "meeting_link": "string (Google Meet link)" } }
+        </response_success>
+        <logic>
+          - Verify Razorpay signature using PaymentService.
+          - Update payment status to success in `payments` table.
+          - Update consultation status to confirmed, attach payment_id.
+          - Generate Google Meet link via VideoService.
+          - Send confirmation SMS/email/notification.
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/my-consultations</path>
+        <description>Get user's all consultations</description>
+        <query_params>
+          { "status": "string (optional, enum: pending|confirmed|completed|cancelled)", "page": "number (default: 1)", "limit": "number (default: 10)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "consultations": [ { "id": "uuid", "lawyer": { "id": "uuid", "name": "string" }, "date": "string", "status": "string", "meeting_link": "string", "can_review": true } ] }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/:consultation_id/cancel</path>
+        <description>Cancel a consultation</description>
+        <request_body>
+          { "reason": "string (optional)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Consultation cancelled", "refund_status": "initiated" }
+        </response_success>
+        <logic>
+          - Check cancellation policy (e.g., must be 24 hours before).
+          - Update status to 'cancelled'.
+          - Initiate refund via PaymentService if payment was 'completed'.
+          - Notify lawyer and user.
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/:consultation_id/complete</path>
+        <description>Mark consultation as completed (lawyer/admin only)</description>
+        <request_body>
+          { "notes": "string (optional, consultation summary)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Consultation marked as completed" }
+        </response_success>
+        <authentication>Lawyer or Admin only</authentication>
+      </endpoint>
+
+    </module>
+
+    <!-- REVIEW APIs -->
+    <module name="reviews">
+      <base_url>/api/v1/reviews</base_url>
+      <authentication>Required</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/create</path>
+        <description>Submit review for completed consultation</description>
+        <request_body>
+          { "consultation_id": "uuid (required)", "rating": "number (required, 1-5)", "review_text": "string (optional, max 200 chars)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Review submitted successfully", "review": { "id": "uuid", "rating": 5, "review_text": "string", "created_at": "timestamp" } }
+        </response_success>
+        <logic>
+          - Check consultation is 'completed' and belongs to user.
+          - Check no existing review for this consultation (unique constraint).
+          - Create review record.
+          - Trigger updateLawyerRatings job/logic immediately.
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/lawyer/:lawyer_id</path>
+        <description>Get all reviews for a lawyer</description>
+        <query_params>
+          { "page": "number (default: 1)", "limit": "number (default: 10)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "total": 45, "average_rating": 4.5, "reviews": [ { "id": "uuid", "user_name": "string (first name only)", "rating": 5, "review_text": "string", "created_at": "timestamp", "is_verified": true } ] }
+        </response_success>
+      </endpoint>
+
+    </module>
+
+    <!-- CASE MANAGEMENT APIs -->
+    <module name="cases">
+      <base_url>/api/v1/cases</base_url>
+      <authentication>Required</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/create</path>
+        <description>Add a new case manually</description>
+        <request_body>
+          { "case_title": "string (required, max 200 chars)", "case_number": "string (optional)", "court_name": "string (required)", "case_type": "string (required, enum: criminal|civil|family|property|other)", "next_hearing_date": "string (optional, format: YYYY-MM-DD)", "lawyer_name": "string (optional)", "notes": "string (optional)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Case added successfully", "case": { "id": "uuid", "case_title": "string", "case_number": "string", "court_name": "string", "case_type": "string", "next_hearing_date": "string", "status": "active" } }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/my-cases</path>
+        <description>Get all cases of logged-in user</description>
+        <query_params>
+          { "status": "string (optional, enum: active|closed|pending)", "case_type": "string (optional)", "sort": "string (optional, default: next_hearing_date)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "total": 5, "cases": [ { "id": "uuid", "case_title": "string", "case_number": "string", "court_name": "string", "case_type": "string", "next_hearing_date": "string", "lawyer_name": "string", "status": "string", "created_at": "timestamp" } ] }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/:case_id</path>
+        <description>Update case details</description>
+        <request_body>
+          { "case_title": "string (optional)", "case_number": "string (optional)", "court_name": "string (optional)", "next_hearing_date": "string (optional)", "status": "string (optional)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Case updated successfully", "case": { "updated case object" } }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>DELETE</method>
+        <path>/:case_id</path>
+        <description>Delete a case</description>
+        <response_success status="200">
+          { "success": true, "message": "Case deleted successfully" }
+        </response_success>
+        <logic>
+          - Update status to deleted/inactive, or hard delete based on preference.
+          - Must also delete related reminders.
+        </logic>
+      </endpoint>
+
+    </module>
+
+    <!-- REMINDER APIs -->
+    <module name="reminders">
+      <base_url>/api/v1/reminders</base_url>
+      <authentication>Required</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/create</path>
+        <description>Set reminder for hearing date</description>
+        <request_body>
+          { "case_id": "uuid (required)", "reminder_date": "string (required, format: YYYY-MM-DD)", "reminder_time": "string (required, format: HH:MM)", "message": "string (optional, auto-generated if empty)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Reminder set successfully", "reminder": { "id": "uuid", "case_title": "string", "reminder_date": "string", "reminder_time": "string", "status": "pending" } }
+        </response_success>
+        <logic>
+          - Create reminder record.
+          - Auto-generate default message if not provided.
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/my-reminders</path>
+        <description>Get all reminders for user</description>
+        <query_params>
+          { "status": "string (optional, enum: pending|sent|failed)" }
+        </query_params>
+        <response_success status="200">
+          { "success": true, "reminders": [ { "id": "uuid", "case": { "id": "uuid", "case_title": "string" }, "reminder_date": "string", "reminder_time": "string", "message": "string", "status": "string" } ] }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>DELETE</method>
+        <path>/:reminder_id</path>
+        <description>Delete/cancel a reminder</description>
+        <response_success status="200">
+          { "success": true, "message": "Reminder cancelled" }
+        </response_success>
+      </endpoint>
+
+    </module>
+
+    <!-- ADMIN APIs -->
+    <module name="admin">
+      <base_url>/api/v1/admin</base_url>
+      <authentication>Required (Admin role only)</authentication>
+
+      <endpoint>
+        <method>POST</method>
+        <path>/lawyers/create</path>
+        <description>Admin adds new lawyer to platform</description>
+        <request_body>
+          { "phone": "string (required)", "name": "string (required)", "email": "string (required)", "password": "string (required)", "bar_council_number": "string (required)", "specialization": "string (required)", "experience_years": "number (required)", "consultation_fee": "number (required)", "city": "string (required)", "bar_certificate_url": "string (required)", "id_proof_url": "string (required)" }
+        </request_body>
+        <response_success status="201">
+          { "success": true, "message": "Lawyer added successfully", "lawyer": { "lawyer object" } }
+        </response_success>
+        <logic>
+          - Create user account with role: lawyer.
+          - Create lawyer profile.
+          - Set `is_verified`: false (pending verification).
+        </logic>
+      </endpoint>
+
+      <endpoint>
+        <method>PUT</method>
+        <path>/lawyers/:lawyer_id/verify</path>
+        <description>Verify lawyer documents and approve</description>
+        <request_body>
+          { "is_verified": "boolean (required)", "rejection_reason": "string (optional, if not verified)" }
+        </request_body>
+        <response_success status="200">
+          { "success": true, "message": "Lawyer verification updated" }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/lawyers/pending</path>
+        <description>Get list of lawyers pending verification</description>
+        <response_success status="200">
+          { "success": true, "lawyers": [ { "id": "uuid", "name": "string", "phone": "string", "bar_council_number": "string", "bar_certificate_url": "string", "id_proof_url": "string", "created_at": "timestamp" } ] }
+        </response_success>
+      </endpoint>
+
+      <endpoint>
+        <method>GET</method>
+        <path>/dashboard</path>
+        <description>Admin dashboard statistics</description>
+        <response_success status="200">
+          { "success": true, "stats": { "total_users": 1250, "total_lawyers": 85, "pending_verifications": 12, "total_consultations": 450, "total_revenue": 450000 } }
+        </response_success>
+      </endpoint>
+
+    </module>
+
+  </api_endpoints>
+
+  <middleware>
+    <authentication_middleware>
+      <name>supabaseAuthMiddleware</name>
+      <description>Verify Supabase JWT token and attach user to request</description>
+      <library>@supabase/supabase-js</library>
+      <logic>
+        - Extract Bearer token from Authorization header
+        - Verify JWT using Supabase client: supabase.auth.getUser(token)
+        - If valid, fetch user profile from public.users using user.id
+        - Attach user object to req.user (includes auth and profile data)
+        - Return 401 if token invalid, expired, or user not found/inactive
+      </logic>
+      <optional_auth>
+        <name>optionalSupabaseAuth</name>
+        <description>Allow unauthenticated requests but attach user if token exists</description>
+        <logic>
+          - Check for Authorization header
+          - If present and valid, attach user to req.user
+          - If absent or invalid, continue without user (req.user = null)
+        </logic>
+      </optional_auth>
+    </authentication_middleware>
+
+    <role_check_middleware>
+      <name>roleMiddleware</name>
+      <description>Check user has required role</description>
+      <parameters>
+        <allowed_roles>Array of roles (e.g., ['admin', 'lawyer'])</allowed_roles>
+      </parameters>
+      <logic>
+        - Check req.user exists (post authMiddleware)
+        - Check req.user.role is in allowed_roles, else return 403
+      </logic>
+    </role_check_middleware>
+
+    <validation_middleware>
+      <name>validateRequest</name>
+      <description>Validate request body/params/query using schemas (Zod or Joi)</description>
+      <library>Zod (TypeScript-first schema validation)</library>
+      <validation_layers>
+        <layer name="input_sanitization">
+          <description>Clean and sanitize all inputs before validation</description>
+          <actions>
+            - Trim whitespace from strings
+            - Remove HTML tags (prevent XSS)
+            - Normalize phone numbers to E.164 format
+            - Lowercase emails
+            - Escape special characters
+          </actions>
+        </layer>
+        <layer name="schema_validation">
+          <description>Validate against Zod schemas</description>
+          <features>
+            - Type coercion for query params
+            - Custom error messages in Hindi/English
+            - Nested object validation
+            - Array length limits
+            - Regex patterns for phone, email, UUIDs
+          </features>
+        </layer>
+        <layer name="business_rules">
+          <description>Validate business logic constraints</description>
+          <rules>
+            - Booking date must be in future
+            - Review can only be submitted after consultation
+            - Reminder date must be before hearing date
+            - Lawyer fee within allowed range
+          </rules>
+        </layer>
+      </validation_layers>
+      <common_schemas>
+        <schema name="uuid">z.string().uuid()</schema>
+        <schema name="email">z.string().email().toLowerCase().max(100)</schema>
+        <schema name="phone">z.string().regex(/^\+91[6-9]\d{9}$/, 'Invalid Indian phone number')</schema>
+        <schema name="password">z.string().min(8).max(128).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&amp;])/)</schema>
+        <schema name="date">z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidFutureDate)</schema>
+        <schema name="time">z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)</schema>
+        <schema name="pagination">z.object({ page: z.number().min(1).default(1), limit: z.number().min(1).max(100).default(10) })</schema>
+      </common_schemas>
+      <error_response>
+        {
+          "success": false,
+          "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "Invalid request data",
+            "details": [
+              { "field": "email", "message": "Invalid email format", "code": "invalid_string" },
+              { "field": "phone", "message": "Invalid Indian phone number", "code": "invalid_string" }
+            ]
+          }
+        }
+      </error_response>
+    </validation_middleware>
+
+    <error_handler_middleware>
+      <name>errorHandler</name>
+      <description>Global error handling</description>
+      <logic>
+        - Catch all errors (use custom error classes for expected errors)
+        - Log error details (Winston or Pino)
+        - Return structured error response (different for dev/prod)
+      </logic>
+    </error_handler_middleware>
+
+    <rate_limiter_middleware>
+      <name>rateLimiter</name>
+      <library>express-rate-limit + rate-limit-redis</library>
+      <store>Redis (for distributed rate limiting across instances)</store>
+      <rules>
+        <auth_endpoints>5 requests per minute per IP (signup, signin, OTP)</auth_endpoints>
+        <otp_endpoints>3 requests per minute per phone number (prevent OTP abuse)</otp_endpoints>
+        <general_apis>100 requests per 15 minutes per user/IP</general_apis>
+        <search_apis>30 requests per minute per IP (lawyer search)</search_apis>
+        <chatbot_apis>20 requests per minute per session (AI queries)</chatbot_apis>
+        <admin_apis>200 requests per 15 minutes per admin user</admin_apis>
+        <payment_webhooks>1000 requests per minute (Razorpay callbacks)</payment_webhooks>
+      </rules>
+      <ip_blocking>
+        <enabled>true</enabled>
+        <max_failed_attempts>10 in 15 minutes</max_failed_attempts>
+        <block_duration>1 hour</block_duration>
+        <whitelist>Razorpay webhook IPs, internal services</whitelist>
+      </ip_blocking>
+      <response_headers>
+        <X-RateLimit-Limit>Request limit for the endpoint</X-RateLimit-Limit>
+        <X-RateLimit-Remaining>Remaining requests in window</X-RateLimit-Remaining>
+        <X-RateLimit-Reset>Unix timestamp when limit resets</X-RateLimit-Reset>
+        <Retry-After>Seconds until retry allowed (when limited)</Retry-After>
+      </response_headers>
+    </rate_limiter_middleware>
+
+    <circuit_breaker_middleware>
+      <name>circuitBreaker</name>
+      <library>opossum</library>
+      <description>Prevent cascade failures when external services are down</description>
+      <targets>
+        <target name="razorpay">
+          <timeout>10000</timeout>
+          <error_threshold_percentage>50</error_threshold_percentage>
+          <reset_timeout>30000</reset_timeout>
+          <fallback>Return payment error with retry suggestion</fallback>
+        </target>
+        <target name="gemini_api">
+          <timeout>15000</timeout>
+          <error_threshold_percentage>40</error_threshold_percentage>
+          <reset_timeout>60000</reset_timeout>
+          <fallback>Return cached/default legal information response</fallback>
+        </target>
+        <target name="google_meet">
+          <timeout>10000</timeout>
+          <error_threshold_percentage>50</error_threshold_percentage>
+          <reset_timeout>30000</reset_timeout>
+          <fallback>Generate meeting link async and notify later</fallback>
+        </target>
+        <target name="twilio_sms">
+          <timeout>5000</timeout>
+          <error_threshold_percentage>30</error_threshold_percentage>
+          <reset_timeout>60000</reset_timeout>
+          <fallback>Queue SMS for retry, log for manual follow-up</fallback>
+        </target>
+      </targets>
+      <monitoring>
+        <emit_events>success, timeout, reject, fallback, close, open, halfOpen</emit_events>
+        <metrics>Circuit state, success/failure counts, response times</metrics>
+      </monitoring>
+    </circuit_breaker_middleware>
+
+    <request_id_middleware>
+      <name>requestIdMiddleware</name>
+      <library>uuid</library>
+      <description>Generate unique request ID for tracing across services</description>
+      <logic>
+        - Generate UUID v4 for each request
+        - Attach to req.id and response header X-Request-ID
+        - Include in all log entries for the request
+        - Pass to downstream services for distributed tracing
+      </logic>
+    </request_id_middleware>
+
+    <compression_middleware>
+      <name>compressionMiddleware</name>
+      <library>compression</library>
+      <config>
+        <level>6</level>
+        <threshold>1024 bytes</threshold>
+        <filter>Compress JSON responses, skip already compressed files</filter>
+      </config>
+    </compression_middleware>
+  </middleware>
+
+  <services>
+    <sms_service>
+      <name>SMSService</name>
+      <provider>Twilio or MSG91</provider>
+      <description>Used for reminders and notifications only. OTP/authentication is handled by Supabase Auth (uses its own SMS provider).</description>
+      <methods>
+        <method name="sendReminder"><parameters><phone>string</phone><message>string</message></parameters></method>
+        <method name="sendBookingConfirmation"><parameters><phone>string</phone><lawyer_name>string</lawyer_name><date>string</date><time>string</time></parameters></method>
+        <method name="sendCancellationNotice"><parameters><phone>string</phone><consultation_id>string</consultation_id></parameters></method>
+      </methods>
+    </sms_service>
+
+    <notification_service>
+      <name>NotificationService</name>
+      <description>Unified notification service supporting multiple channels</description>
+      <channels>
+        <channel name="sms" provider="Twilio/MSG91">
+          <use_cases>Hearing reminders, consultation reminders, booking confirmations</use_cases>
+          <templates>
+            <template id="hearing_reminder">Your hearing for {case_title} is scheduled for {date} at {court_name}. - Nyaay Saathi</template>
+            <template id="consultation_reminder">Reminder: Your consultation with {lawyer_name} is in {hours} hour(s). Join: {meeting_link}</template>
+            <template id="booking_confirmed">Booking confirmed with {lawyer_name} on {date} at {time}. Amount: ₹{amount}</template>
+            <template id="payment_received">Payment of ₹{amount} received for consultation #{id}. Thank you!</template>
+          </templates>
+        </channel>
+        <channel name="email" provider="Supabase Auth / Resend / SendGrid">
+          <use_cases>Account verification, password reset, receipts, weekly summaries</use_cases>
+          <templates>
+            <template id="welcome_email">Welcome to Nyaay Saathi with personalized onboarding</template>
+            <template id="consultation_receipt">Detailed receipt with payment info, lawyer details, meeting link</template>
+            <template id="weekly_case_summary">Summary of upcoming hearings and case updates</template>
+            <template id="review_request">Request review after consultation completion</template>
+          </templates>
+        </channel>
+        <channel name="push" provider="Firebase Cloud Messaging (future)">
+          <use_cases>Real-time updates, chat messages, booking updates</use_cases>
+          <priority>future_enhancement</priority>
+        </channel>
+        <channel name="in_app" provider="Supabase Realtime">
+          <use_cases>Real-time notifications within the app</use_cases>
+          <storage>notifications table with read/unread status</storage>
+        </channel>
+        <channel name="whatsapp" provider="Twilio WhatsApp API (future)">
+          <use_cases>Rich notifications with buttons, document sharing</use_cases>
+          <priority>post_mvp</priority>
+        </channel>
+      </channels>
+      <preferences>
+        <user_configurable>true</user_configurable>
+        <default_channels>sms, email, in_app</default_channels>
+        <quiet_hours>10 PM - 8 AM (user configurable)</quiet_hours>
+        <language_preference>Respect user's language setting (English/Hindi)</language_preference>
+      </preferences>
+      <delivery_tracking>
+        <store_delivery_status>true</store_delivery_status>
+        <retry_failed>true</retry_failed>
+        <analytics>Track open rates, click rates for optimization</analytics>
+      </delivery_tracking>
+    </notification_service>
+
+    <payment_service>
+      <name>PaymentService</name>
+      <provider>Razorpay</provider>
+      <methods>
+        <method name="createOrder"><parameters><amount>number (paise)</amount><currency>INR</currency><receipt>string (consultation_id)</receipt></parameters><returns>order_id, amount, currency</returns></method>
+        <method name="verifySignature"><parameters><order_id>string</order_id><payment_id>string</payment_id><signature>string</signature></parameters><returns>boolean</returns></method>
+        <method name="initiateRefund"><parameters><payment_id>string</payment_id><amount>number (optional)</amount></parameters></method>
+      </methods>
+    </payment_service>
+
+    <video_service>
+      <name>VideoService</name>
+      <provider>Google Meet API</provider>
+      <methods>
+        <method name="createMeeting">
+          <parameters><title>string</title><start_time>datetime</start_time><duration_minutes>number</duration_minutes></parameters>
+          <returns>meeting_link</returns>
+          <logic>Use Google Calendar API to create an event with a Meet link and return the URL.</logic>
+        </method>
+      </methods>
+    </video_service>
+
+    <chatbot_service>
+      <name>ChatbotService</name>
+      <provider>Google Gemini API</provider>
+      <model>gemini-1.5-flash or gemini-1.5-pro</model>
+      <methods>
+        <method name="processQuery">
+          <parameters><query>string</query><language>string</language><session_id>string</session_id><conversation_history>array (optional)</conversation_history></parameters>
+          <returns>{ "response": "string", "intent": "string", "confidence": number, "suggestions": [] }</returns>
+          <logic>
+            - Build system prompt with legal domain context and Indian law knowledge
+            - Include conversation history for multi-turn support
+            - Send request to Gemini API with safety settings
+            - Parse response and extract intent, answer, and suggestions
+            - Handle rate limits and fallback responses
+          </logic>
+        </method>
+        <method name="generateCostEstimate">
+          <parameters><case_type>string</case_type><city>string</city><additional_context>string (optional)</additional_context></parameters>
+          <returns>{ "estimate": object, "explanation": "string" }</returns>
+          <logic>Use Gemini to generate intelligent cost estimates with explanations based on case details.</logic>
+        </method>
+      </methods>
+      <system_prompt>
+        You are Nyaay Saathi, a legal assistant chatbot for Indian users.
+        Provide helpful legal information in simple language (English or Hindi).
+        Always recommend consulting a qualified lawyer for specific legal advice.
+        Focus on: criminal law, civil law, family law, property law, and corporate law.
+      </system_prompt>
+    </chatbot_service>
+
+    <storage_service>
+      <name>StorageService</name>
+      <provider>Supabase Storage</provider>
+      <methods>
+        <method name="uploadFile">
+          <parameters><file>buffer or File</file><bucket>string</bucket><path>string</path></parameters>
+          <returns>{ data: { path }, error }</returns>
+          <logic>
+            - Use supabase.storage.from(bucket).upload(path, file)
+            - Handle file size limits and mime type validation
+            - Return public URL or signed URL based on bucket privacy
+          </logic>
+        </method>
+        <method name="getPublicUrl">
+          <parameters><bucket>string</bucket><path>string</path></parameters>
+          <returns>public_url</returns>
+          <logic>Use supabase.storage.from(bucket).getPublicUrl(path)</logic>
+        </method>
+        <method name="createSignedUrl">
+          <parameters><bucket>string</bucket><path>string</path><expiresIn>number (seconds)</expiresIn></parameters>
+          <returns>signed_url</returns>
+          <logic>Use supabase.storage.from(bucket).createSignedUrl(path, expiresIn)</logic>
+        </method>
+        <method name="deleteFile">
+          <parameters><bucket>string</bucket><paths>string[]</paths></parameters>
+          <returns>{ data, error }</returns>
+          <logic>Use supabase.storage.from(bucket).remove(paths)</logic>
+        </method>
+        <method name="listFiles">
+          <parameters><bucket>string</bucket><folder>string</folder></parameters>
+          <returns>{ data: FileObject[], error }</returns>
+        </method>
+      </methods>
+      <buckets>
+        <bucket name="lawyer-documents" public="false">Bar certificates, ID proofs (private)</bucket>
+        <bucket name="profile-photos" public="true">User and lawyer profile photos</bucket>
+      </buckets>
+    </storage_service>
+
+    <realtime_service>
+      <name>RealtimeService</name>
+      <provider>Supabase Realtime</provider>
+      <description>Real-time notifications and updates using Supabase channels</description>
+      <methods>
+        <method name="subscribeToConsultations">
+          <parameters><user_id>string</user_id></parameters>
+          <logic>
+            - Subscribe to consultations table changes for user
+            - Notify on booking confirmations, cancellations, status changes
+          </logic>
+        </method>
+        <method name="subscribeToReminders">
+          <parameters><user_id>string</user_id></parameters>
+          <logic>
+            - Subscribe to reminders for user
+            - Send real-time reminder notifications
+          </logic>
+        </method>
+        <method name="broadcastNotification">
+          <parameters><channel>string</channel><event>string</event><payload>object</payload></parameters>
+          <logic>Use supabase.channel(channel).send({ type: 'broadcast', event, payload })</logic>
+        </method>
+      </methods>
+    </realtime_service>
+
+    <queue_service>
+      <name>QueueService</name>
+      <provider>BullMQ with Redis (or Supabase Edge Functions for serverless)</provider>
+      <description>Async job processing for non-blocking operations</description>
+      <queues>
+        <queue name="email-notifications" concurrency="5">
+          <jobs>booking_confirmation, cancellation_notice, review_reminder</jobs>
+          <retry_attempts>3</retry_attempts>
+          <backoff>exponential</backoff>
+        </queue>
+        <queue name="sms-reminders" concurrency="3">
+          <jobs>hearing_reminder, consultation_reminder</jobs>
+          <retry_attempts>5</retry_attempts>
+          <backoff>exponential</backoff>
+          <rate_limit>10 per second (Twilio limits)</rate_limit>
+        </queue>
+        <queue name="payment-processing" concurrency="2">
+          <jobs>refund_initiation, payment_reconciliation</jobs>
+          <retry_attempts>3</retry_attempts>
+          <priority>high</priority>
+        </queue>
+        <queue name="analytics" concurrency="10">
+          <jobs>track_event, update_stats, generate_report</jobs>
+          <retry_attempts>1</retry_attempts>
+          <priority>low</priority>
+        </queue>
+        <queue name="file-processing" concurrency="3">
+          <jobs>document_scan, image_resize, pdf_generation</jobs>
+          <retry_attempts>2</retry_attempts>
+        </queue>
+      </queues>
+      <dead_letter_queue>
+        <enabled>true</enabled>
+        <max_age>7 days</max_age>
+        <alert_on_dlq>Notify admin on DLQ entries</alert_on_dlq>
+      </dead_letter_queue>
+      <monitoring>
+        <dashboard>Bull Board UI at /admin/queues</dashboard>
+        <metrics>Queue depth, processing time, failure rate</metrics>
+      </monitoring>
+    </queue_service>
+
+    <webhook_service>
+      <name>WebhookService</name>
+      <description>Secure handling of incoming webhooks from external services</description>
+      <endpoints>
+        <webhook path="/webhooks/razorpay">
+          <events>payment.captured, payment.failed, refund.processed</events>
+          <verification>
+            - Verify X-Razorpay-Signature header using HMAC SHA256
+            - Compare computed signature with received signature
+            - Reject requests with invalid signatures
+          </verification>
+          <idempotency>
+            - Store webhook event ID in Redis/DB
+            - Skip processing if already handled
+            - Return 200 OK for duplicate events
+          </idempotency>
+        </webhook>
+      </endpoints>
+      <security>
+        <signature_verification>Required for all webhooks</signature_verification>
+        <ip_whitelisting>Allow only known webhook source IPs</ip_whitelisting>
+        <timestamp_validation>Reject events older than 5 minutes</timestamp_validation>
+        <replay_protection>Store processed event IDs for 24 hours</replay_protection>
+      </security>
+      <retry_handling>
+        <acknowledge_quickly>Return 200 within 5 seconds</acknowledge_quickly>
+        <async_processing>Queue heavy processing for background</async_processing>
+      </retry_handling>
+    </webhook_service>
+  </services>
+
+  <scheduled_jobs>
+    <job name="sendPendingReminders">
+      <schedule>Every 5 minutes</schedule>
+      <description>Check and send pending SMS reminders for case hearings.</description>
+      <implementation>
+        - Query reminders table where status = 'pending' and reminder_date/time is due
+        - Use Supabase Edge Functions or external cron service
+        - Update status to 'sent' or 'failed' after processing
+      </implementation>
+    </job>
+    <job name="sendHearingReminders">
+      <schedule>Daily at 6 AM</schedule>
+      <description>Auto-create reminders for hearings scheduled for the next day.</description>
+    </job>
+    <job name="sendConsultationReminders">
+      <schedule>Every hour</schedule>
+      <description>Remind users about confirmed consultations starting in 1-2 hours (include meeting link).</description>
+      <implementation>
+        - Can use Supabase pg_cron extension for database-level scheduling
+        - Or use Supabase Edge Functions with external scheduler (e.g., cron-job.org)
+      </implementation>
+    </job>
+    <job name="updateLawyerRatings">
+      <schedule>Triggered on review insert (database trigger)</schedule>
+      <description>Recalculate lawyer average ratings and total review counts. Uses Supabase database trigger for real-time updates.</description>
+    </job>
+    <job name="autoCompletePastConsultations">
+      <schedule>Daily at 2 AM</schedule>
+      <description>Mark past confirmed consultations (older than 1 day) as 'completed'.</description>
+      <implementation>
+        - Use pg_cron extension in Supabase for scheduled SQL execution
+        - Or use Supabase Edge Function triggered by external cron
+      </implementation>
+    </job>
+    <job name="cleanupExpiredSessions">
+      <schedule>Weekly</schedule>
+      <description>Supabase Auth handles session cleanup automatically. Optional: clean up stale chatbot sessions.</description>
+    </job>
+  </scheduled_jobs>
+
+  <security>
+    <supabase_security>
+      <description>Authentication and authorization security managed by Supabase</description>
+      <row_level_security>
+        <enabled>true (mandatory for all tables)</enabled>
+        <description>RLS policies defined per table to restrict data access based on auth.uid()</description>
+        <best_practices>
+          - Always enable RLS on tables containing user data
+          - Use auth.uid() to verify ownership
+          - Create helper functions like is_admin() for role checks
+          - Test policies thoroughly in development
+          - Use SECURITY DEFINER functions carefully
+        </best_practices>
+      </row_level_security>
+      <session_management>
+        <jwt_expiry>3600 seconds (configurable in Supabase Dashboard)</jwt_expiry>
+        <refresh_token>Automatic refresh with @supabase/supabase-js</refresh_token>
+        <session_storage>Secure cookies or localStorage (configurable)</session_storage>
+      </session_management>
+      <password_policy>
+        <min_length>8 characters (production recommended)</min_length>
+        <requirements>Mixed case, numbers, special characters (configurable in Supabase Dashboard)</requirements>
+      </password_policy>
+      <mfa>
+        <enabled>Optional (configurable per user)</enabled>
+        <methods>TOTP Authenticator Apps</methods>
+      </mfa>
+      <api_keys>
+        <anon_key>Public key for client-side (respects RLS)</anon_key>
+        <service_role_key>Private key for server-side (bypasses RLS - never expose to client)</service_role_key>
+      </api_keys>
+    </supabase_security>
+
+    <production_security>
+      <description>Additional security measures for production deployment</description>
+      <network_restrictions>
+        <database_ssl>Enforce SSL connections to database</database_ssl>
+        <ip_allowlist>Configure allowed IPs for direct database access (optional)</ip_allowlist>
+      </network_restrictions>
+      <audit_logging>
+        <enabled>true</enabled>
+        <events>Auth events, admin actions, data modifications</events>
+      </audit_logging>
+      <backup_encryption>
+        <at_rest>AES-256 encryption (handled by Supabase)</at_rest>
+        <in_transit>TLS 1.3</in_transit>
+      </backup_encryption>
+    </production_security>
+
+    <api_security>
+      <cors>
+        <allowed_origins>- https://nyaaysaathi.com, - https://app.nyaaysaathi.com</allowed_origins>
+        <production_note>Remove localhost origins in production</production_note>
+      </cors>
+      <helmet>Enable helmet.js for security headers</helmet>
+      <rate_limiting>Implement using express-rate-limit</rate_limiting>
+      <input_sanitization>
+        - Sanitize all user inputs
+        - RLS prevents unauthorized data access
+        - Parameterized queries used by Supabase client
+        - Prevent XSS attacks
+        - Validate file uploads (type, size, content)
+      </input_sanitization>
+    </api_security>
+
+    <storage_security>
+      <bucket_policies>
+        - Private buckets require signed URLs for access
+        - Public buckets use RLS policies for write operations
+        - File upload restrictions (size, mime type) enforced at bucket level
+        - Scan uploaded files for malware (optional: use external service)
+      </bucket_policies>
+    </storage_security>
+
+    <data_privacy>
+      <pii_handling>
+        - Encrypt sensitive data at rest (handled by Supabase)
+        - Mask phone numbers in logs
+        - Don't log passwords or OTPs
+        - Use service_role_key only server-side
+        - Implement data retention policies
+        - Support GDPR data export/deletion requests
+      </pii_handling>
+    </data_privacy>
+  </security>
+
+  <environment_variables>
+    <variable name="NODE_ENV">development|production</variable>
+    <variable name="PORT">3000</variable>
+    
+    <!-- Supabase Configuration -->
+    <variable name="SUPABASE_URL">https://[project-ref].supabase.co</variable>
+    <variable name="SUPABASE_ANON_KEY">Public anon key (safe for client-side)</variable>
+    <variable name="SUPABASE_SERVICE_ROLE_KEY">Service role key (server-side only, bypasses RLS)</variable>
+    <variable name="SUPABASE_JWT_SECRET">JWT secret for custom token verification (optional)</variable>
+    
+    <!-- Payment -->
+    <variable name="RAZORPAY_KEY_ID">Razorpay Key ID</variable>
+    <variable name="RAZORPAY_KEY_SECRET">Razorpay Key Secret</variable>
+    
+    <!-- SMS (for reminders - Supabase Auth handles OTP separately) -->
+    <variable name="TWILIO_ACCOUNT_SID">Twilio Account SID</variable>
+    <variable name="TWILIO_AUTH_TOKEN">Twilio Auth Token</variable>
+    <variable name="TWILIO_PHONE_NUMBER">Twilio phone number for sending SMS</variable>
+    
+    <!-- Google APIs -->
+    <variable name="GOOGLE_OAUTH_CLIENT_ID">For Google Meet API</variable>
+    <variable name="GOOGLE_OAUTH_CLIENT_SECRET">Google OAuth client secret</variable>
+    <variable name="GEMINI_API_KEY">Google Gemini API key for chatbot</variable>
+    
+    <!-- Application -->
+    <variable name="FRONTEND_URL">https://app.nyaaysaathi.com</variable>
+    <variable name="API_URL">https://api.nyaaysaathi.com</variable>
+    
+    <!-- Redis (for caching and queues) -->
+    <variable name="REDIS_URL">redis://localhost:6379 or Upstash Redis URL</variable>
+    <variable name="REDIS_PASSWORD">Redis password (if required)</variable>
+    
+    <!-- Monitoring -->
+    <variable name="SENTRY_DSN">Sentry DSN for error tracking</variable>
+    <variable name="DATADOG_API_KEY">Datadog API key (optional)</variable>
+    <variable name="LOG_LEVEL">info (production) | debug (development)</variable>
+    
+    <!-- Webhook Security -->
+    <variable name="RAZORPAY_WEBHOOK_SECRET">Secret for verifying Razorpay webhooks</variable>
+  </environment_variables>
+
+  <testing>
+    <unit_tests>
+      <framework>Jest or Mocha + Chai</framework>
+      <coverage>Minimum 70% code coverage</coverage>
+      <test_categories>
+        <category name="Models">Test database models and relationships</category>
+        <category name="Services">Test business logic in services</category>
+        <category name="Validators">Test input validation schemas</category>
+        <category name="Utils">Test helper functions and utilities</category>
+        <category name="Middleware">Test auth, rate limiting, error handling</category>
+      </test_categories>
+      <mocking_strategy>
+        <supabase>Use @supabase/supabase-js mock or test instance</supabase>
+        <external_apis>Mock Razorpay, Gemini, Twilio responses</external_apis>
+        <redis>Use ioredis-mock or test Redis instance</redis>
+      </mocking_strategy>
+    </unit_tests>
+
+    <integration_tests>
+      <framework>Jest + Supertest</framework>
+      <test_database>Separate Supabase test project or local Docker</test_database>
+      <test_categories>
+        <category name="Auth APIs">Test Supabase Auth flows, signup, signin, OTP verification, OAuth, session management, profile completion.</category>
+        <category name="Lawyer APIs">Test search with filters, profile retrieval, availability slots generation.</category>
+        <category name="Consultation APIs">Test booking flow, payment integration (test mode), status updates.</category>
+        <category name="Case APIs">Test CRUD operations and filtering.</category>
+        <category name="RLS Policies">Test Row Level Security policies for data isolation.</category>
+        <category name="Webhooks">Test webhook signature verification and idempotency.</category>
+        <category name="Queues">Test job processing and retry logic.</category>
+      </test_categories>
+      <test_data_management>
+        <seeding>Use factory functions to create test data</seeding>
+        <cleanup>Reset database state between test suites</cleanup>
+        <isolation>Each test runs in transaction that's rolled back</isolation>
+      </test_data_management>
+    </integration_tests>
+
+    <end_to_end_tests>
+      <framework>Playwright or Cypress</framework>
+      <critical_flows>
+        <flow name="user_registration">Signup → Verify Email/OTP → Complete Profile</flow>
+        <flow name="lawyer_booking">Search → Select Lawyer → Book Slot → Pay → Get Meeting Link</flow>
+        <flow name="case_management">Add Case → Set Reminder → Receive SMS</flow>
+        <flow name="chatbot_interaction">Ask Question → Get Response → Follow Suggestion</flow>
+      </critical_flows>
+    </end_to_end_tests>
+
+    <load_testing>
+      <tool>Apache JMeter or Artillery or k6</tool>
+      <scenarios>
+        <scenario name="normal_load">100 concurrent users for 10 minutes</scenario>
+        <scenario name="peak_load">500 concurrent users for 5 minutes</scenario>
+        <scenario name="stress_test">Ramp up to 1000 users to find breaking point</scenario>
+        <scenario name="soak_test">200 users for 2 hours to detect memory leaks</scenario>
+      </scenarios>
+      <performance_targets>
+        <response_time>95% of requests under 500ms (p95)</response_time>
+        <response_time>99% of requests under 2 seconds (p99)</response_time>
+        <error_rate>Less than 0.1%</error_rate>
+        <throughput>1000 requests per minute sustained</throughput>
+      </performance_targets>
+    </load_testing>
+
+    <security_testing>
+      <tools>OWASP ZAP, npm audit, Snyk</tools>
+      <checks>
+        <check>SQL injection prevention (parameterized queries via Supabase)</check>
+        <check>XSS prevention (input sanitization, CSP headers)</check>
+        <check>CSRF protection (SameSite cookies, CSRF tokens)</check>
+        <check>Authentication bypass attempts</check>
+        <check>RLS policy bypass attempts</check>
+        <check>Rate limiting effectiveness</check>
+        <check>Dependency vulnerability scanning</check>
+      </checks>
+      <penetration_testing>Quarterly by external security firm</penetration_testing>
+    </security_testing>
+
+    <contract_testing>
+      <tool>Pact or similar</tool>
+      <description>Ensure API contracts between frontend and backend match</description>
+      <benefits>
+        - Catch breaking changes early
+        - Enable independent deployment
+        - Document API expectations
+      </benefits>
+    </contract_testing>
+  </testing>
+
+  <deployment>
+    <supabase_project>
+      <description>Supabase provides Database, Auth, Storage, and Realtime as managed services</description>
+      <setup>
+        - Create project at app.supabase.com
+        - Configure Auth providers (Email, Phone, Google OAuth)
+        - Set up SMS provider (Twilio) for Phone OTP in Auth settings
+        - Run database migrations via Supabase Dashboard or CLI
+        - Create storage buckets with appropriate policies
+        - Enable required extensions (uuid-ossp, pg_cron, pgcrypto)
+      </setup>
+      <production_configuration>
+        <plan>Pro ($25/month) or Team ($599/month) for production</plan>
+        <compute>Upgrade compute for high traffic (2 CPU, 4GB RAM minimum)</compute>
+        <connection_pooling>Enable PgBouncer for connection pooling (Transaction mode)</connection_pooling>
+        <read_replicas>Add read replicas for scaling read-heavy workloads</read_replicas>
+        <point_in_time_recovery>Enable for Pro plan (7 days retention)</point_in_time_recovery>
+        <custom_domain>Configure custom domain for API and Auth</custom_domain>
+      </production_configuration>
+    </supabase_project>
+    <backend_hosting>
+      <recommendation>Vercel, Railway, or Render for Node.js/Express API</recommendation>
+      <alternative>Supabase Edge Functions (Deno) for serverless approach</alternative>
+      <production_specs>
+        <min_instances>2 (for high availability)</min_instances>
+        <auto_scaling>Enable auto-scaling based on traffic</auto_scaling>
+        <health_checks>Configure health check endpoints</health_checks>
+        <regions>Deploy to regions closest to users (e.g., Mumbai for India)</regions>
+      </production_specs>
+      <horizontal_scaling>
+        <load_balancer>Application Load Balancer with health checks</load_balancer>
+        <session_management>Stateless - all session data in Supabase/Redis</session_management>
+        <scaling_triggers>
+          <trigger metric="cpu_utilization" threshold="70%" action="scale_up"/>
+          <trigger metric="request_count" threshold="1000/min" action="scale_up"/>
+          <trigger metric="response_time_p95" threshold="500ms" action="scale_up"/>
+          <trigger metric="cpu_utilization" threshold="30%" cooldown="10min" action="scale_down"/>
+        </scaling_triggers>
+        <min_instances>2</min_instances>
+        <max_instances>10</max_instances>
+        <scale_increment>1</scale_increment>
+      </horizontal_scaling>
+      <blue_green_deployment>
+        <enabled>true</enabled>
+        <strategy>Deploy to green, verify health, switch traffic, keep blue as rollback</strategy>
+        <rollback_time>Less than 1 minute</rollback_time>
+      </blue_green_deployment>
+      <container_config>
+        <runtime>Node.js 20 LTS</runtime>
+        <memory>512MB - 2GB (auto-scale)</memory>
+        <cpu>0.5 - 2 vCPU (auto-scale)</cpu>
+        <startup_probe>HTTP GET /health with 30s timeout</startup_probe>
+        <liveness_probe>HTTP GET /health every 30s</liveness_probe>
+        <readiness_probe>HTTP GET /ready every 10s</readiness_probe>
+      </container_config>
+    </backend_hosting>
+    <ci_cd_pipeline>
+      <tool>GitHub Actions</tool>
+      <workflow>
+        - Code Push -> Run Tests -> Deploy to Staging
+        - Supabase CLI for database migrations: supabase db push
+        - Manual Approval -> Deploy to Production
+      </workflow>
+      <supabase_cli>
+        - supabase init (initialize project)
+        - supabase db diff (generate migrations)
+        - supabase db push (apply migrations)
+        - supabase functions deploy (deploy edge functions)
+        - supabase db reset (reset database - staging only)
+      </supabase_cli>
+      <environment_strategy>
+        <development>Local Supabase (supabase start) or free Supabase project</development>
+        <staging>Separate Supabase project for staging</staging>
+        <production>Production Supabase project with Pro plan</production>
+      </environment_strategy>
+    </ci_cd_pipeline>
+    <monitoring>
+      <supabase_dashboard>Built-in metrics for Database, Auth, Storage, Realtime</supabase_dashboard>
+      <application_monitoring>Vercel Analytics, or self-hosted (Prometheus + Grafana)</application_monitoring>
+      <error_tracking>Sentry</error_tracking>
+      <logging>Pino or Winston + external log aggregation (Logflare, Datadog)</logging>
+      <alerting>
+        <database_alerts>High CPU, storage usage, slow queries</database_alerts>
+        <api_alerts>Error rate spikes, high latency, 5xx errors</api_alerts>
+        <auth_alerts>Suspicious login attempts, brute force detection</auth_alerts>
+      </alerting>
+      <apm_integration>
+        <name>Application Performance Monitoring</name>
+        <providers>Datadog APM, New Relic, or OpenTelemetry</providers>
+        <features>
+          <distributed_tracing>Track requests across services with correlation IDs</distributed_tracing>
+          <performance_profiling>CPU and memory profiling in production</performance_profiling>
+          <database_monitoring>Query performance, N+1 detection, slow query alerts</database_monitoring>
+          <custom_metrics>Business KPIs, conversion funnels, user journeys</custom_metrics>
+        </features>
+        <custom_spans>
+          <span name="payment.process">Track Razorpay payment flow</span>
+          <span name="chatbot.query">Track Gemini API calls</span>
+          <span name="video.create_meeting">Track Google Meet creation</span>
+          <span name="storage.upload">Track file uploads</span>
+        </custom_spans>
+      </apm_integration>
+      <structured_logging>
+        <format>JSON</format>
+        <fields>
+          <field>timestamp (ISO 8601)</field>
+          <field>level (error, warn, info, debug)</field>
+          <field>request_id (correlation)</field>
+          <field>user_id (when authenticated)</field>
+          <field>method, path, status_code</field>
+          <field>response_time_ms</field>
+          <field>error_stack (on errors)</field>
+          <field>metadata (contextual data)</field>
+        </fields>
+        <log_levels>
+          <production>info (errors, warnings, important events)</production>
+          <staging>debug (all events for troubleshooting)</staging>
+          <development>trace (everything including request/response bodies)</development>
+        </log_levels>
+        <sensitive_data_redaction>
+          <fields>password, token, otp, phone (partial), email (partial)</fields>
+          <pattern>Replace with [REDACTED]</pattern>
+        </sensitive_data_redaction>
+      </structured_logging>
+      <health_checks>
+        <endpoint>/health</endpoint>
+        <checks>
+          <check name="database">Supabase connection status</check>
+          <check name="redis">Cache connection status</check>
+          <check name="external_services">Razorpay, Gemini API reachability</check>
+          <check name="disk_space">Available disk space</check>
+          <check name="memory">Memory usage percentage</check>
+        </checks>
+        <response>
+          { "status": "healthy|degraded|unhealthy", "timestamp": "ISO date", "checks": { "database": { "status": "up", "latency_ms": 5 }, ... }, "version": "1.0.0" }
+        </response>
+      </health_checks>
+      <sla_monitoring>
+        <uptime_target>99.9%</uptime_target>
+        <p95_latency_target>500ms</p95_latency_target>
+        <p99_latency_target>1000ms</p99_latency_target>
+        <error_budget>0.1% monthly</error_budget>
+      </sla_monitoring>
+    </monitoring>
+    <disaster_recovery>
+      <backup_strategy>
+        <automatic_backups>Daily (Supabase Pro), retained for 7 days</automatic_backups>
+        <point_in_time_recovery>Enabled (Pro plan)</point_in_time_recovery>
+        <manual_backups>Weekly full backup to external storage</manual_backups>
+      </backup_strategy>
+      <failover>
+        <database>Supabase handles automatic failover</database>
+        <api>Multi-instance deployment with load balancer</api>
+      </failover>
+      <rto>Recovery Time Objective: 1 hour</rto>
+      <rpo>Recovery Point Objective: 5 minutes</rpo>
+    </disaster_recovery>
+  </deployment>
+
+  <documentation>
+    <api_documentation>
+      <tool>Swagger/OpenAPI 3.0</tool>
+      <location>/api/docs</location>
+      <update_frequency>With every API change</update_frequency>
+    </api_documentation>
+    <developer_guide>
+      <file>README.md</file>
+      <contents>Project overview, Setup instructions, Environment variables, Running locally, Running tests, Deployment process.</contents>
+    </developer_guide>
+  </documentation>
+
+  <best_practices>
+    <code_quality>
+      <linting>ESLint with Airbnb config</linting>
+      <formatting>Prettier (single quotes, 2 spaces)</formatting>
+      <git_workflow>Gitflow (main, develop, feature branches)</git_workflow>
+    </code_quality>
+    <performance_optimization>
+      <database>Use indexes, connection pooling, query optimization.</database>
+      <caching>
+        <provider>Redis (Upstash Redis for serverless or self-hosted)</provider>
+        <strategy>
+          <cache_aside>Primary pattern - check cache first, then DB</cache_aside>
+          <write_through>For critical data consistency</write_through>
+          <cache_invalidation>Event-driven invalidation on data changes</cache_invalidation>
+        </strategy>
+        <cached_data>
+          <item key="lawyer:list:{filters_hash}" ttl="5 minutes">Lawyer search results</item>
+          <item key="lawyer:{id}" ttl="15 minutes">Individual lawyer profile</item>
+          <item key="lawyer:{id}:availability:{date}" ttl="2 minutes">Slot availability</item>
+          <item key="lawyer:{id}:reviews" ttl="10 minutes">Lawyer reviews</item>
+          <item key="cost_matrix:{case_type}:{city}" ttl="24 hours">Cost estimation data</item>
+          <item key="admin:dashboard" ttl="5 minutes">Admin dashboard stats</item>
+          <item key="user:{id}:profile" ttl="10 minutes">User profile data</item>
+          <item key="session:{session_id}:chat" ttl="1 hour">Chatbot conversation history</item>
+        </cached_data>
+        <invalidation_events>
+          <event trigger="consultation.created">Invalidate lawyer availability cache</event>
+          <event trigger="consultation.cancelled">Invalidate lawyer availability cache</event>
+          <event trigger="review.created">Invalidate lawyer profile and reviews cache</event>
+          <event trigger="lawyer.updated">Invalidate lawyer profile and list cache</event>
+          <event trigger="user.updated">Invalidate user profile cache</event>
+        </invalidation_events>
+        <cache_warming>
+          <description>Pre-populate cache during low-traffic periods</description>
+          <items>Top lawyers by city, popular specializations, cost matrices</items>
+          <schedule>Daily at 4 AM IST</schedule>
+        </cache_warming>
+      </caching>
+      <api_optimization>Implement pagination, use gzip compression, lazy load data.</api_optimization>
+    </performance_optimization>
+    <error_handling>
+      <custom_error_classes>
+        <class name="ValidationError" status="400">Invalid input data</class>
+        <class name="UnauthorizedError" status="401">Missing or invalid authentication</class>
+        <class name="ForbiddenError" status="403">Insufficient permissions</class>
+        <class name="NotFoundError" status="404">Resource not found</class>
+        <class name="ConflictError" status="409">Resource conflict (duplicate, state mismatch)</class>
+        <class name="RateLimitError" status="429">Too many requests</class>
+        <class name="ExternalServiceError" status="502">Third-party service failure</class>
+        <class name="InternalError" status="500">Unexpected server error</class>
+      </custom_error_classes>
+      <error_response_format>
+        {
+          "success": false,
+          "error": {
+            "code": "VALIDATION_ERROR",
+            "message": "User-friendly error message",
+            "details": [{ "field": "email", "message": "Invalid email format" }],
+            "request_id": "uuid",
+            "timestamp": "ISO date"
+          }
+        }
+      </error_response_format>
+      <retry_strategies>
+        <strategy name="exponential_backoff">
+          <description>For transient failures (network, rate limits)</description>
+          <initial_delay>100ms</initial_delay>
+          <max_delay>30s</max_delay>
+          <max_retries>3</max_retries>
+          <multiplier>2</multiplier>
+          <jitter>true</jitter>
+        </strategy>
+        <strategy name="immediate_retry">
+          <description>For idempotent operations with quick recovery</description>
+          <max_retries>2</max_retries>
+          <delay>50ms</delay>
+        </strategy>
+      </retry_strategies>
+      <graceful_degradation>
+        <chatbot_fallback>Return pre-defined FAQ responses when Gemini is down</chatbot_fallback>
+        <payment_fallback>Queue payment for processing when Razorpay times out</payment_fallback>
+        <sms_fallback>Log reminder for manual follow-up when SMS fails</sms_fallback>
+      </graceful_degradation>
+    </error_handling>
+  </best_practices>
+
+  <mvp_checklist>
+    <phase1 name="Foundation &amp; Supabase Setup (Week 1-2)">
+      <tasks>
+        - Create Supabase project at app.supabase.com
+        - Initialize Node.js project with Express.js
+        - Setup folder structure (controllers, routes, services, middleware, utils)
+        - Install @supabase/supabase-js client library
+        - Configure Supabase client with environment variables
+        - Create database schema via Supabase SQL Editor or migrations
+        - Enable Row Level Security (RLS) on all tables
+        - Create RLS policies for each table
+        - Create database functions (is_admin, handle_new_user, update_lawyer_rating)
+        - Create database triggers for user creation and rating updates
+        - Setup Express server with CORS, helmet, body-parser
+        - Implement error handling middleware with custom error classes
+        - Setup Pino or Winston logger
+        - Configure environment variables with dotenv
+        - Setup ESLint and Prettier for code quality
+      </tasks>
+    </phase1>
+    <phase2 name="Authentication with Supabase Auth (Week 3)">
+      <tasks>
+        - Configure Auth providers in Supabase Dashboard:
+          - Enable Email/Password authentication
+          - Enable Phone OTP (configure Twilio in Auth settings)
+          - Enable Google OAuth (add client ID and secret)
+        - Implement signup endpoint (email + password, phone + OTP)
+        - Implement signin endpoint (password-based)
+        - Implement phone OTP flow (send OTP, verify OTP)
+        - Implement OAuth flow (Google signin)
+        - Implement signout endpoint
+        - Implement token refresh endpoint
+        - Implement /auth/me endpoint to get current user
+        - Implement forgot-password and reset-password flows
+        - Create supabaseAuthMiddleware for JWT verification
+        - Create optionalSupabaseAuth middleware
+        - Implement /auth/complete-profile for additional user data
+        - Test all auth flows end-to-end
+        - Setup rate limiting for auth endpoints (5 req/min)
+      </tasks>
+    </phase2>
+    <phase3 name="User &amp; Lawyer Management (Week 4)">
+      <tasks>
+        - Implement GET /user/profile endpoint
+        - Implement PUT /user/profile for profile updates
+        - Create Supabase Storage buckets:
+          - 'lawyer-documents' (private) for bar certificates, ID proofs
+          - 'profile-photos' (public) for profile pictures
+        - Configure storage bucket policies and RLS
+        - Implement StorageService with upload, getPublicUrl, createSignedUrl
+        - Implement file upload endpoints for lawyer documents
+        - Generate signed URLs for private document access
+        - Implement GET /lawyers/search with filters (specialization, city, price, rating)
+        - Implement pagination for lawyer search results
+        - Implement GET /lawyers/:id for detailed lawyer profile
+        - Implement GET /lawyers/:id/availability for time slot generation
+        - Implement lawyer_availability CRUD operations
+        - Implement slot availability checking against existing bookings
+      </tasks>
+    </phase3>
+    <phase4 name="Consultation Booking &amp; Payments (Week 5)">
+      <tasks>
+        - Install Razorpay Node.js SDK
+        - Implement PaymentService with createOrder, verifySignature, initiateRefund
+        - Implement POST /consultations/book (validate slot, create Razorpay order)
+        - Implement POST /consultations/:id/confirm-payment with signature verification
+        - Setup Google Calendar API credentials for Meet integration
+        - Implement VideoService.createMeeting() for Google Meet link generation
+        - Auto-generate Meet link on payment confirmation
+        - Implement GET /consultations/my-consultations with status filtering
+        - Implement PUT /consultations/:id/cancel with refund initiation
+        - Implement PUT /consultations/:id/complete (lawyer/admin only)
+        - Setup Supabase Realtime for booking notifications
+        - Implement 24-hour cancellation policy check
+      </tasks>
+    </phase4>
+    <phase5 name="Reviews, Cases &amp; Reminders (Week 6)">
+      <tasks>
+        - Implement POST /reviews/create with consultation verification
+        - Enforce one review per consultation (database unique constraint)
+        - Implement GET /reviews/lawyer/:id with pagination
+        - Verify database trigger for automatic rating updates
+        - Implement POST /cases/create for manual case entry
+        - Implement GET /cases/my-cases with status and type filtering
+        - Implement PUT /cases/:id for case updates
+        - Implement DELETE /cases/:id (soft delete with related reminders)
+        - Implement POST /reminders/create with auto-message generation
+        - Implement GET /reminders/my-reminders with status filtering
+        - Implement DELETE /reminders/:id for reminder cancellation
+        - Validate reminder dates are in the future
+      </tasks>
+    </phase5>
+    <phase6 name="AI Chatbot with Gemini (Week 7)">
+      <tasks>
+        - Setup Google AI Studio account and generate Gemini API key
+        - Install @google/generative-ai SDK
+        - Implement ChatbotService with processQuery method
+        - Create system prompt for Nyaay Saathi legal assistant persona
+        - Configure safety settings for legal content
+        - Implement multi-turn conversation support with history
+        - Implement POST /chatbot/query with Gemini API integration
+        - Parse Gemini responses to extract intent and confidence
+        - Generate contextual suggestions (Talk to lawyer, Calculate costs, etc.)
+        - Log all interactions to chatbot_interactions table
+        - Implement POST /chatbot/cost-estimate with AI-assisted calculations
+        - Create cost matrix for different case types and cities (tier 1/2/3)
+        - Handle Gemini API rate limits with exponential backoff
+        - Implement fallback responses for API failures
+        - Support bilingual responses (English and Hindi)
+      </tasks>
+    </phase6>
+    <phase7 name="Scheduled Jobs &amp; Automation (Week 8)">
+      <tasks>
+        - Enable pg_cron extension in Supabase Dashboard
+        - Create database-level cron jobs using pg_cron for:
+          - Auto-complete past consultations
+          - Create hearing reminders for next day
+        - Setup external cron service (cron-job.org) or Supabase Edge Functions for:
+          - sendPendingReminders (every 5 minutes)
+          - sendConsultationReminders (hourly)
+        - Configure SMS service (Twilio/MSG91) for reminder delivery
+        - Implement job logging and error tracking
+        - Setup Supabase Realtime subscriptions for real-time notifications
+        - Implement RealtimeService for consultation and reminder updates
+        - Test all scheduled jobs in staging environment
+      </tasks>
+    </phase7>
+    <phase8 name="Admin Panel APIs (Week 9)">
+      <tasks>
+        - Implement roleMiddleware for admin-only routes
+        - Implement GET /admin/dashboard with aggregated stats
+        - Calculate total users, lawyers, consultations, revenue using Supabase queries
+        - Implement POST /admin/lawyers/create (add new lawyer)
+        - Implement GET /admin/lawyers/pending (unverified lawyers list)
+        - Implement PUT /admin/lawyers/:id/verify (approve/reject)
+        - Document verification workflow with rejection reasons
+        - Implement admin user management (activate/deactivate users)
+        - Implement revenue reports and consultation analytics
+        - Use service_role_key for admin operations that bypass RLS
+      </tasks>
+    </phase8>
+    <phase9 name="Testing &amp; Documentation (Week 10)">
+      <tasks>
+        - Setup Jest testing framework with Supertest
+        - Write unit tests for all services (ChatbotService, PaymentService, etc.)
+        - Write unit tests for validators and utility functions
+        - Write integration tests for Supabase Auth flows
+        - Write integration tests for consultation booking flow
+        - Write integration tests for payment verification
+        - Achieve minimum 70% code coverage
+        - Setup Swagger/OpenAPI 3.0 documentation at /api/docs
+        - Document all endpoints with request/response examples
+        - Write comprehensive README.md (setup, env vars, deployment)
+        - Perform load testing with Artillery (1000 req/min target)
+        - Validate 95% of requests under 2 seconds response time
+        - Fix performance bottlenecks identified in testing
+      </tasks>
+    </phase9>
+    <phase10 name="Production Deployment (Week 11-12)">
+      <tasks>
+        - Upgrade Supabase project to Pro plan for production
+        - Configure production environment variables
+        - Run final database migrations on production Supabase
+        - Verify all RLS policies are active and correct
+        - Deploy Node.js/Express backend to Vercel/Railway/Render
+        - Configure custom domain and SSL for API
+        - Setup GitHub Actions CI/CD pipeline:
+          - Run tests on PR
+          - Deploy to staging on merge to develop
+          - Deploy to production on merge to main
+        - Configure Supabase CLI in CI for database migrations
+        - Setup Sentry for error tracking
+        - Configure monitoring and alerting
+        - Perform smoke tests on production
+        - Setup database backups (automatic with Supabase Pro)
+        - Document disaster recovery procedures
+        - Go live and monitor initial traffic
+      </tasks>
+    </phase10>
+  </mvp_checklist>
+
+  <cost_estimation>
+    <total_mvp_cost>₹3,50,000 (~$4,200) including 3 months development and contingency.</total_mvp_cost>
+    <supabase_costs>
+      <free_tier>Generous free tier for development and small-scale production</free_tier>
+      <pro_plan>$25/month for production (includes more resources, daily backups)</pro_plan>
+      <notes>Significant cost savings vs. separate Auth (Clerk) + DB (Azure) + Storage (Azure) services</notes>
+    </supabase_costs>
+  </cost_estimation>
+
+  <post_mvp_features>
+    <phase2_features priority="high">eCourts API integration, Push notifications (via Supabase Realtime), Audio consultation mode, Document storage for users.</phase2_features>
+    <phase3_features priority="medium">Voice input/output for chatbot, Similar cases database with ML matching, Subscription plans.</phase3_features>
+  </post_mvp_features>
+
+  <success_metrics>
+    <technical_metrics>API Uptime > 99.5%, Avg Response Time &lt; 1.5s, Error Rate &lt; 1%.</technical_metrics>
+    <business_metrics>1,000 User Signups in M1, 100 Consultation Bookings in M1, Avg Rating > 4.0.</business_metrics>
+  </success_metrics>
+
+  <notes>
+    <note priority="critical">Always enable RLS on all tables. Never expose SUPABASE_SERVICE_ROLE_KEY to client-side code.</note>
+    <note priority="critical">Razorpay signature verification is critical for payment security and must be tested thoroughly.</note>
+    <note priority="high">Use database triggers and functions for automatic data updates (ratings, user creation).</note>
+    <note priority="high">Test RLS policies thoroughly before production deployment.</note>
+    <note priority="medium">Keep the MVP scope tight to deliver quickly and iterate based on user feedback.</note>
+    <note priority="info">Supabase provides a unified platform - reduces DevOps complexity significantly.</note>
+  </notes>
+</project_specification>
