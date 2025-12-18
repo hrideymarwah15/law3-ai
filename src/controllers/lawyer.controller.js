@@ -191,7 +191,7 @@ class LawyerController {
       const { lawyer_id } = req.params;
       const { date } = req.query;
 
-      // Get day of week from date
+      // Get day of week from date as string
       const dateObj = new Date(date);
       const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
       const dayOfWeek = days[dateObj.getDay()];

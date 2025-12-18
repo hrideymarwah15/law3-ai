@@ -134,6 +134,7 @@ const webhook = rateLimit({
   handler: rateLimitHandler,
 });
 
+// Export both grouped and individual limiters for flexibility
 module.exports = {
   rateLimiter: {
     general,
@@ -144,4 +145,12 @@ module.exports = {
     admin,
     webhook,
   },
+  // Individual exports for direct use in routes
+  generalLimiter: general,
+  authLimiter: auth,
+  otpLimiter: otp,
+  searchLimiter: search,
+  chatbotLimiter: chatbot,
+  adminLimiter: admin,
+  webhookLimiter: webhook,
 };
