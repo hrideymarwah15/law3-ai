@@ -12,6 +12,9 @@ const {
   getConsultationsSchema,
   cancelConsultationSchema,
   completeConsultationSchema,
+  rescheduleConsultationSchema,
+  getConsultationDetailsSchema,
+  getRescheduleHistorySchema,
 } = require('../validators/consultation.validators');
 
 // All routes require authentication
@@ -23,10 +26,31 @@ router.get(
   asyncHandler(consultationController.getUpcomingVideoConsultations)
 );
 
+// Get user's consultations
+router.get(
+  '/my-consultations',
+  validate(getConsultationsSchema),
+  asyncHandler(consultationController.getMyConsultations)
+);
+
+// Get single consultation details
+router.get(
+  '/:consultation_id',
+  validate(getConsultationDetailsSchema),
+  asyncHandler(consultationController.getConsultationDetails)
+);
+
 // Get meeting details for a consultation
 router.get(
   '/:consultation_id/meeting',
   asyncHandler(consultationController.getMeetingDetails)
+);
+
+// Get reschedule history
+router.get(
+  '/:consultation_id/reschedule-history',
+  validate(getRescheduleHistorySchema),
+  asyncHandler(consultationController.getRescheduleHistory)
 );
 
 // Manually generate meeting link
@@ -57,6 +81,13 @@ router.put(
   '/:consultation_id/cancel',
   validate(cancelConsultationSchema),
   asyncHandler(consultationController.cancel)
+);
+
+// Reschedule consultation
+router.put(
+  '/:consultation_id/reschedule',
+  validate(rescheduleConsultationSchema),
+  asyncHandler(consultationController.reschedule)
 );
 
 // Only verified lawyers can complete consultations

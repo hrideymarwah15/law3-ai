@@ -4,6 +4,7 @@ const paymentService = require('../services/payment.service');
 const videoService = require('../services/video.service');
 const smsService = require('../services/sms.service');
 const meetingScheduler = require('../services/meeting-scheduler.service');
+const notificationService = require('../services/notification.service');
 const { 
   NotFoundError, 
   ValidationError, 
@@ -205,6 +206,13 @@ class ConsultationController {
           consultation.booking_date,
           consultation.booking_time,
           consultation.amount
+        );
+
+        // Send payment receipt SMS
+        await smsService.sendPaymentReceipt(
+          req.user.phone,
+          consultation.amount,
+          consultation_id
         );
       } catch (smsError) {
         logger.error({ message: 'SMS notification failed', error: smsError.message });
@@ -723,6 +731,386 @@ class ConsultationController {
           provider: 'jitsi',
           is_new: result.isNew
         }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PUT /consultations/:consultation_id/reschedule
+   * Reschedule a confirmed consultation
+   */
+  async reschedule(req, res, next) {
+    try {
+      const { consultation_id } = req.params;
+      const { new_date, new_time, reason } = req.body;
+      const userId = req.user.id;
+      const userRole = req.user.role;
+
+      // Fetch consultation with relations
+      const { data: consultation, error: fetchError } = await supabaseAdmin
+        .from('consultations')
+        .select(`
+          *,
+          users:user_id(id, display_name, email, phone),
+          lawyers:lawyer_id(
+            id,
+            user_id,
+            consultation_duration,
+            users:user_id(id, display_name, email, phone)
+          )
+        `)
+        .eq('id', consultation_id)
+        .single();
+
+      if (fetchError || !consultation) {
+        throw new NotFoundError('Consultation not found');
+      }
+
+      // Check authorization
+      const isUser = consultation.user_id === userId;
+      const isLawyer = consultation.lawyers?.user_id === userId;
+      const isAdmin = userRole === 'admin';
+
+      if (!isUser && !isLawyer && !isAdmin) {
+        throw new ForbiddenError('You cannot reschedule this consultation');
+      }
+
+      // Check if consultation can be rescheduled
+      if (!['pending', 'confirmed'].includes(consultation.status)) {
+        throw new ValidationError(`Cannot reschedule a consultation with status: ${consultation.status}`);
+      }
+
+      // Check reschedule limit (max 3 times)
+      if (consultation.reschedule_count >= 3) {
+        throw new ValidationError('Maximum reschedule limit reached (3 times). Please cancel and book a new consultation.');
+      }
+
+      // Check minimum advance notice (4 hours before current schedule)
+      const currentSchedule = new Date(`${consultation.booking_date}T${consultation.booking_time}`);
+      const now = new Date();
+      const hoursUntilConsultation = (currentSchedule - now) / (1000 * 60 * 60);
+
+      if (hoursUntilConsultation < 4 && !isAdmin) {
+        throw new ValidationError('Rescheduling must be done at least 4 hours before the consultation');
+      }
+
+      // Validate new slot is available
+      const { data: existingBooking } = await supabaseAdmin
+        .from('consultations')
+        .select('id')
+        .eq('lawyer_id', consultation.lawyer_id)
+        .eq('booking_date', new_date)
+        .eq('booking_time', new_time)
+        .neq('id', consultation_id)
+        .in('status', ['pending', 'confirmed'])
+        .single();
+
+      if (existingBooking) {
+        throw new ConflictError('The requested time slot is not available');
+      }
+
+      // Check lawyer unavailability
+      const { data: unavailability } = await supabaseAdmin
+        .from('lawyer_unavailability')
+        .select('id')
+        .eq('lawyer_id', consultation.lawyer_id)
+        .eq('unavailable_date', new_date)
+        .or(`start_time.is.null,and(start_time.lte.${new_time},end_time.gt.${new_time})`)
+        .single();
+
+      if (unavailability) {
+        throw new ConflictError('The lawyer is not available at the requested time');
+      }
+
+      // Calculate new scheduled times
+      const duration = consultation.duration || consultation.lawyers?.consultation_duration || 30;
+      const newScheduledStart = new Date(`${new_date}T${new_time}:00`);
+      const newScheduledEnd = new Date(newScheduledStart.getTime() + duration * 60000);
+
+      // Store original values for history
+      const originalData = {
+        booking_date: consultation.booking_date,
+        booking_time: consultation.booking_time,
+        scheduled_start: consultation.scheduled_start,
+        scheduled_end: consultation.scheduled_end,
+      };
+
+      // Create reschedule history record
+      await supabaseAdmin
+        .from('consultation_reschedules')
+        .insert({
+          consultation_id,
+          original_date: originalData.booking_date,
+          original_time: originalData.booking_time,
+          original_scheduled_start: originalData.scheduled_start,
+          original_scheduled_end: originalData.scheduled_end,
+          new_date,
+          new_time,
+          new_scheduled_start: newScheduledStart.toISOString(),
+          new_scheduled_end: newScheduledEnd.toISOString(),
+          rescheduled_by: userId,
+          rescheduled_by_role: isLawyer ? 'lawyer' : (isAdmin ? 'admin' : 'user'),
+          reason,
+          status: 'completed',
+        });
+
+      // Update consultation
+      const { data: updatedConsultation, error: updateError } = await supabaseAdmin
+        .from('consultations')
+        .update({
+          booking_date: new_date,
+          booking_time: new_time,
+          scheduled_start: newScheduledStart.toISOString(),
+          scheduled_end: newScheduledEnd.toISOString(),
+          reschedule_count: consultation.reschedule_count + 1,
+          meeting_link: null, // Clear old meeting link
+          meeting_link_generated_at: null,
+          status: 'confirmed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', consultation_id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // Invalidate cache
+      await cache.del(`lawyer:${consultation.lawyer_id}:availability:${consultation.booking_date}`);
+      await cache.del(`lawyer:${consultation.lawyer_id}:availability:${new_date}`);
+
+      // Determine who to notify
+      const initiatorName = isLawyer 
+        ? consultation.lawyers.users.display_name 
+        : (isUser ? consultation.users.display_name : 'Admin');
+      
+      const otherPartyId = isLawyer ? consultation.user_id : consultation.lawyers.user_id;
+
+      // Create notification for the other party
+      try {
+        await supabaseAdmin
+          .from('notifications')
+          .insert({
+            user_id: otherPartyId,
+            title: 'Consultation Rescheduled',
+            body: `Your consultation has been rescheduled by ${initiatorName}. New time: ${new_date} at ${new_time}. Reason: ${reason}`,
+            notification_type: 'consultation',
+            category: 'consultation',
+            priority: 'high',
+            entity_type: 'consultation',
+            entity_id: consultation_id,
+            action_url: `/consultations/${consultation_id}`,
+            channels: ['push', 'email', 'sms'],
+          });
+      } catch (notifyError) {
+        logger.error({ message: 'Failed to create reschedule notification', error: notifyError.message });
+      }
+
+      // Send SMS notification
+      try {
+        const otherPartyPhone = isLawyer ? consultation.users.phone : consultation.lawyers.users.phone;
+        if (otherPartyPhone) {
+          await smsService.sendGenericSMS(
+            otherPartyPhone,
+            `Nyaay Saathi: Your consultation on ${originalData.booking_date} has been rescheduled to ${new_date} at ${new_time}. Reason: ${reason}`
+          );
+        }
+      } catch (smsError) {
+        logger.error({ message: 'Failed to send reschedule SMS', error: smsError.message });
+      }
+
+      logger.info({
+        message: 'Consultation rescheduled',
+        consultationId: consultation_id,
+        rescheduledBy: userId,
+        from: `${originalData.booking_date} ${originalData.booking_time}`,
+        to: `${new_date} ${new_time}`,
+        reason,
+      });
+
+      res.json({
+        success: true,
+        message: 'Consultation rescheduled successfully',
+        consultation: {
+          id: updatedConsultation.id,
+          booking_date: updatedConsultation.booking_date,
+          booking_time: updatedConsultation.booking_time,
+          status: updatedConsultation.status,
+          reschedule_count: updatedConsultation.reschedule_count,
+          previous_schedule: {
+            date: originalData.booking_date,
+            time: originalData.booking_time,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /consultations/:consultation_id/reschedule-history
+   * Get reschedule history for a consultation
+   */
+  async getRescheduleHistory(req, res, next) {
+    try {
+      const { consultation_id } = req.params;
+      const userId = req.user.id;
+
+      // Verify access
+      const { data: consultation, error: consultationError } = await supabaseAdmin
+        .from('consultations')
+        .select('user_id, lawyers:lawyer_id(user_id)')
+        .eq('id', consultation_id)
+        .single();
+
+      if (consultationError || !consultation) {
+        throw new NotFoundError('Consultation not found');
+      }
+
+      const isUser = consultation.user_id === userId;
+      const isLawyer = consultation.lawyers?.user_id === userId;
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isUser && !isLawyer && !isAdmin) {
+        throw new ForbiddenError('You cannot view this consultation history');
+      }
+
+      // Get reschedule history
+      const { data: history, error } = await supabaseAdmin
+        .from('consultation_reschedules')
+        .select(`
+          id,
+          original_date,
+          original_time,
+          new_date,
+          new_time,
+          rescheduled_by,
+          rescheduled_by_role,
+          reason,
+          status,
+          created_at,
+          users:rescheduled_by(display_name)
+        `)
+        .eq('consultation_id', consultation_id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      res.json({
+        success: true,
+        history: history.map(h => ({
+          id: h.id,
+          original: {
+            date: h.original_date,
+            time: h.original_time,
+          },
+          new: {
+            date: h.new_date,
+            time: h.new_time,
+          },
+          rescheduled_by: {
+            name: h.users?.display_name || 'Unknown',
+            role: h.rescheduled_by_role,
+          },
+          reason: h.reason,
+          created_at: h.created_at,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /consultations/:consultation_id
+   * Get full consultation details
+   */
+  async getConsultationDetails(req, res, next) {
+    try {
+      const { consultation_id } = req.params;
+      const userId = req.user.id;
+
+      const { data: consultation, error } = await supabaseAdmin
+        .from('consultations')
+        .select(`
+          *,
+          users:user_id(id, display_name, email, phone, avatar_url),
+          lawyers:lawyer_id(
+            id,
+            specialization,
+            experience_years,
+            profile_photo_url,
+            users:user_id(id, display_name, email, phone)
+          ),
+          payments(id, amount, status, razorpay_payment_id, paid_at),
+          reviews:reviews(id, rating, review_text, created_at)
+        `)
+        .eq('id', consultation_id)
+        .single();
+
+      if (error || !consultation) {
+        throw new NotFoundError('Consultation not found');
+      }
+
+      // Check authorization
+      const isUser = consultation.user_id === userId;
+      const isLawyer = consultation.lawyers?.users?.id === userId;
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isUser && !isLawyer && !isAdmin) {
+        throw new ForbiddenError('You cannot view this consultation');
+      }
+
+      // Get reschedule count
+      const { count: rescheduleCount } = await supabaseAdmin
+        .from('consultation_reschedules')
+        .select('*', { count: 'exact', head: true })
+        .eq('consultation_id', consultation_id);
+
+      res.json({
+        success: true,
+        consultation: {
+          id: consultation.id,
+          reference_number: consultation.reference_number,
+          status: consultation.status,
+          consultation_type: consultation.consultation_type,
+          booking: {
+            date: consultation.booking_date,
+            time: consultation.booking_time,
+            duration: consultation.duration,
+          },
+          user: isLawyer || isAdmin ? {
+            id: consultation.users.id,
+            name: consultation.users.display_name,
+            email: consultation.users.email,
+            phone: consultation.users.phone,
+            avatar_url: consultation.users.avatar_url,
+          } : null,
+          lawyer: {
+            id: consultation.lawyers.id,
+            name: consultation.lawyers.users.display_name,
+            specialization: consultation.lawyers.specialization,
+            experience_years: consultation.lawyers.experience_years,
+            photo: consultation.lawyers.profile_photo_url,
+          },
+          problem_description: consultation.problem_description,
+          amount: consultation.amount,
+          payment: consultation.payments?.[0] ? {
+            status: consultation.payments[0].status,
+            paid_at: consultation.payments[0].paid_at,
+          } : null,
+          meeting: consultation.meeting_link ? {
+            link: consultation.meeting_link,
+            provider: consultation.meeting_provider,
+          } : null,
+          notes: consultation.notes,
+          reschedule_count: rescheduleCount || 0,
+          can_reschedule: ['pending', 'confirmed'].includes(consultation.status) && (rescheduleCount || 0) < 3,
+          review: consultation.reviews?.[0] || null,
+          created_at: consultation.created_at,
+        },
       });
     } catch (error) {
       next(error);

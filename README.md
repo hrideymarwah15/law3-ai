@@ -7,8 +7,10 @@
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7+-DC382D?style=for-the-badge&logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Socket.io](https://img.shields.io/badge/Socket.io-Real--time-010101?style=for-the-badge&logo=socket.io&logoColor=white)
+![Jitsi](https://img.shields.io/badge/Jitsi-Video%20Calls-97979A?style=for-the-badge&logo=jitsi&logoColor=white)
 
-A production-ready Node.js/Express backend for the Nyaay Saathi legal services platform, providing API endpoints for lawyer discovery, consultation booking, AI-powered legal chatbot, case tracking, and more.
+A production-ready Node.js/Express backend for the Nyaay Saathi legal services platform with **124 API endpoints**, providing lawyer discovery, video consultations, real-time chat, AI-powered legal chatbot, case tracking, notifications, and more.
 
 [Getting Started](#-quick-start) •
 [API Documentation](#-api-endpoints) •
@@ -23,15 +25,20 @@ A production-ready Node.js/Express backend for the Nyaay Saathi legal services p
 
 | Feature | Description |
 |---------|-------------|
-| 🔐 **Authentication** | Supabase Auth with email/password, phone OTP, and OAuth |
+| 🔐 **Authentication** | Supabase Auth with email/password, phone OTP, Google OAuth |
 | 👨‍⚖️ **Lawyer Discovery** | Search verified lawyers by specialization, location, rating |
+| 📝 **Lawyer Registration** | Self-service lawyer registration with admin approval workflow |
 | 📅 **Consultation Booking** | Schedule paid video consultations with Razorpay payments |
+| 🔄 **Reschedule Support** | Flexible rescheduling with history tracking (max 3x, 4hr notice) |
+| 🎥 **Video Consultations** | Jitsi Meet integration with auto-generated meeting links |
+| 💬 **Real-time Chat** | Socket.io powered messaging with file sharing & read receipts |
+| 🔔 **Notifications** | In-app notifications with preferences, SMS via Twilio |
 | 🤖 **AI Legal Chatbot** | Google Gemini 2.0 powered legal guidance in Hindi & English |
 | 📁 **Case Tracking** | Track court cases and set hearing reminders |
-| 📱 **SMS Notifications** | Twilio-powered reminders and confirmations |
-| 🛡️ **Admin Dashboard** | Lawyer verification, user management, analytics |
+| 🛡️ **Admin Dashboard** | 30+ admin methods: lawyer verification, user management, analytics |
 | 📊 **Audit Logging** | Comprehensive audit trail for compliance |
 | 💰 **Cost Calculator** | Legal cost estimates by case type and city |
+| 🗑️ **Account Management** | GDPR-compliant account deletion with data export |
 
 ## 📋 Prerequisites
 
@@ -52,6 +59,8 @@ A production-ready Node.js/Express backend for the Nyaay Saathi legal services p
 | **Database** | PostgreSQL (via Supabase) |
 | **Authentication** | Supabase Auth + Custom OTP |
 | **Caching** | Redis 7 (ioredis) |
+| **Real-time** | Socket.io 4.x with Redis Adapter |
+| **Video Calls** | Jitsi Meet (self-hosted or 8x8.vc) |
 | **Payments** | Razorpay |
 | **SMS** | Twilio |
 | **AI** | Google Gemini 2.0 Flash |
@@ -66,60 +75,79 @@ A production-ready Node.js/Express backend for the Nyaay Saathi legal services p
 nyaay-saathi/
 ├── 📂 src/
 │   ├── 📂 config/
-│   │   ├── logger.js         # Pino logger configuration
-│   │   ├── redis.js          # Redis client & cache utilities
-│   │   └── supabase.js       # Supabase clients setup
+│   │   ├── logger.js            # Pino logger configuration
+│   │   ├── redis.js             # Redis client & cache utilities
+│   │   └── supabase.js          # Supabase clients setup
 │   ├── 📂 controllers/
-│   │   ├── admin.controller.js
-│   │   ├── auth.controller.js
-│   │   ├── case.controller.js
-│   │   ├── chatbot.controller.js
-│   │   ├── consultation.controller.js
-│   │   ├── lawyer.controller.js
-│   │   ├── reminder.controller.js
-│   │   ├── review.controller.js
-│   │   └── user.controller.js
+│   │   ├── admin.controller.js           # 30+ admin methods
+│   │   ├── auth.controller.js            # Authentication
+│   │   ├── case.controller.js            # Case management
+│   │   ├── chat.controller.js            # Real-time messaging
+│   │   ├── chatbot.controller.js         # AI chatbot
+│   │   ├── consultation.controller.js    # Booking & reschedule
+│   │   ├── lawyer.controller.js          # Lawyer profiles
+│   │   ├── lawyer-registration.controller.js  # Self-registration
+│   │   ├── notification.controller.js    # In-app notifications
+│   │   ├── reminder.controller.js        # Hearing reminders
+│   │   ├── review.controller.js          # Reviews & ratings
+│   │   └── user.controller.js            # User management
 │   ├── 📂 middleware/
-│   │   ├── auth.js           # Supabase auth middleware
-│   │   ├── audit.middleware.js # Audit logging middleware
-│   │   ├── errorHandler.js   # Error classes & handlers
-│   │   ├── rateLimiter.js    # Rate limiting middleware
-│   │   ├── requestId.js      # Request ID tracing
-│   │   └── validate.js       # Zod validation middleware
+│   │   ├── auth.js              # Supabase auth middleware
+│   │   ├── audit.middleware.js  # Audit logging middleware
+│   │   ├── errorHandler.js      # Error classes & handlers
+│   │   ├── rateLimiter.js       # Rate limiting middleware
+│   │   ├── requestId.js         # Request ID tracing
+│   │   └── validate.js          # Zod validation middleware
 │   ├── 📂 routes/
-│   │   ├── admin.routes.js
-│   │   ├── auth.routes.js
-│   │   ├── case.routes.js
-│   │   ├── chatbot.routes.js
-│   │   ├── consultation.routes.js
-│   │   ├── health.routes.js
-│   │   ├── lawyer.routes.js
-│   │   ├── reminder.routes.js
-│   │   ├── review.routes.js
-│   │   ├── user.routes.js
-│   │   └── webhook.routes.js
+│   │   ├── admin.routes.js      # 29 endpoints
+│   │   ├── auth.routes.js       # 11 endpoints
+│   │   ├── case.routes.js       # 5 endpoints
+│   │   ├── chat.routes.js       # 16 endpoints
+│   │   ├── chatbot.routes.js    # 3 endpoints
+│   │   ├── consultation.routes.js # 12 endpoints
+│   │   ├── health.routes.js     # 4 endpoints
+│   │   ├── lawyer.routes.js     # 14 endpoints
+│   │   ├── notification.routes.js # 12 endpoints
+│   │   ├── reminder.routes.js   # 7 endpoints
+│   │   ├── review.routes.js     # 2 endpoints
+│   │   ├── user.routes.js       # 7 endpoints
+│   │   └── webhook.routes.js    # 2 endpoints
 │   ├── 📂 services/
-│   │   ├── audit.service.js      # Audit logging service
-│   │   ├── chatbot.service.js    # Gemini AI integration
-│   │   ├── otp.service.js        # OTP management
-│   │   ├── payment.service.js    # Razorpay integration
-│   │   ├── sms.service.js        # Twilio integration
-│   │   ├── storage.service.js    # Supabase Storage
-│   │   └── video.service.js      # Video meeting links
+│   │   ├── audit.service.js         # Audit logging
+│   │   ├── chatbot.service.js       # Gemini AI integration
+│   │   ├── meeting.service.js       # Jitsi Meet links
+│   │   ├── notification.service.js  # Push notifications
+│   │   ├── otp.service.js           # OTP management
+│   │   ├── payment.service.js       # Razorpay integration
+│   │   ├── sms.service.js           # Twilio SMS
+│   │   ├── socket.service.js        # Socket.io events
+│   │   ├── storage.service.js       # Supabase Storage
+│   │   └── video.service.js         # Video meeting links
 │   ├── 📂 validators/
 │   │   ├── admin.validators.js
 │   │   ├── auth.validators.js
 │   │   ├── case.validators.js
+│   │   ├── chat.validators.js
 │   │   ├── common.validators.js
 │   │   ├── consultation.validators.js
-│   │   └── lawyer.validators.js
-│   └── index.js              # Express app entry point
+│   │   ├── lawyer.validators.js
+│   │   ├── notification.validators.js
+│   │   └── user.validators.js
+│   └── index.js                 # Express app entry point
 ├── 📂 database/
-│   └── schema.sql            # PostgreSQL schema
-├── 📄 Dockerfile             # Multi-stage Docker build
-├── 📄 docker-compose.yml     # Production compose
-├── 📄 docker-compose.dev.yml # Development compose
-├── 📄 .env.example           # Environment template
+│   ├── schema.sql               # Base PostgreSQL schema
+│   └── 📂 migrations/
+│       ├── 001_initial.sql
+│       ├── 002_consultations.sql
+│       ├── 003_chat.sql
+│       ├── 004_video.sql
+│       ├── 005_admin_enhancements.sql
+│       ├── 006_schema_v2.sql
+│       └── 007_production_features.sql
+├── 📄 Dockerfile                # Multi-stage Docker build
+├── 📄 docker-compose.yml        # Production compose
+├── 📄 docker-compose.dev.yml    # Development compose
+├── 📄 .env.example              # Environment template
 └── 📄 package.json
 ```
 
@@ -237,7 +265,7 @@ npm run dev
 npm start
 ```
 
-## 📚 API Endpoints
+## 📚 API Endpoints (124 Total)
 
 ### Health Check
 | Method | Endpoint | Description |
@@ -247,7 +275,7 @@ npm start
 | GET | `/health/ready` | Kubernetes readiness probe |
 | GET | `/health/live` | Kubernetes liveness probe |
 
-### Authentication (`/api/v1/auth`)
+### Authentication (`/api/v1/auth`) - 11 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/signup` | ❌ | Register with email/password |
@@ -259,15 +287,21 @@ npm start
 | GET | `/me` | ✅ | Get current user |
 | POST | `/forgot-password` | ❌ | Request password reset |
 | POST | `/reset-password` | ❌ | Reset password with token |
+| GET | `/google` | ❌ | Google OAuth redirect |
+| GET | `/google/callback` | ❌ | Google OAuth callback |
 
-### Users (`/api/v1/user`)
+### Users (`/api/v1/user`) - 7 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/profile` | ✅ | Get user profile |
 | PUT | `/profile` | ✅ | Update profile |
 | PUT | `/change-password` | ✅ | Change password |
+| DELETE | `/me` | ✅ | Delete account (requires confirmation) |
+| GET | `/notification-preferences` | ✅ | Get notification settings |
+| PUT | `/notification-preferences` | ✅ | Update notification settings |
+| POST | `/data-export` | ✅ | Request GDPR data export |
 
-### Lawyers (`/api/v1/lawyers`)
+### Lawyers (`/api/v1/lawyers`) - 14 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/` | ❌ | List verified lawyers |
@@ -275,24 +309,76 @@ npm start
 | GET | `/:lawyer_id` | ❌ | Get lawyer profile |
 | GET | `/:lawyer_id/availability` | ❌ | Get available slots |
 | PUT | `/availability` | ✅ 👨‍⚖️ | Set availability (lawyer only) |
+| POST | `/register` | ✅ | Submit lawyer registration |
+| GET | `/registration-status` | ✅ | Check registration status |
+| PUT | `/registration` | ✅ | Update pending registration |
+| DELETE | `/registration` | ✅ | Withdraw registration |
+| GET | `/me` | ✅ 👨‍⚖️ | Get own lawyer profile |
+| PUT | `/me` | ✅ 👨‍⚖️ | Update own profile |
+| PUT | `/availability/bulk` | ✅ 👨‍⚖️ | Set weekly availability |
+| POST | `/unavailability` | ✅ 👨‍⚖️ | Mark unavailable dates |
+| GET | `/my-consultations` | ✅ 👨‍⚖️ | View consultations |
+| GET | `/dashboard` | ✅ 👨‍⚖️ | Lawyer dashboard metrics |
 
-### Consultations (`/api/v1/consultations`)
+### Consultations (`/api/v1/consultations`) - 12 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/book` | ✅ | Book a consultation |
 | POST | `/confirm-payment` | ✅ | Confirm Razorpay payment |
 | GET | `/` | ✅ | List user's consultations |
 | GET | `/:id` | ✅ | Get consultation details |
+| GET | `/:id/details` | ✅ | Get full consultation info |
 | POST | `/:id/cancel` | ✅ | Cancel consultation |
 | POST | `/:id/complete` | ✅ 👨‍⚖️ | Mark as complete |
+| PUT | `/:id/reschedule` | ✅ | Reschedule consultation |
+| GET | `/:id/reschedule-history` | ✅ | View reschedule attempts |
+| GET | `/:id/meeting` | ✅ | Get meeting link |
+| POST | `/:id/join` | ✅ | Join video meeting |
+| POST | `/:id/end` | ✅ 👨‍⚖️ | End video meeting |
 
-### Reviews (`/api/v1/reviews`)
+### Chat (`/api/v1/chat`) - 16 endpoints
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/conversations` | ✅ | List conversations |
+| POST | `/conversations` | ✅ | Create conversation |
+| GET | `/conversations/:id` | ✅ | Get conversation |
+| GET | `/conversations/:id/messages` | ✅ | Get messages |
+| POST | `/conversations/:id/messages` | ✅ | Send message |
+| PUT | `/conversations/:id/read` | ✅ | Mark as read |
+| DELETE | `/conversations/:id` | ✅ | Delete conversation |
+| POST | `/messages/:id/file` | ✅ | Upload file |
+| GET | `/unread-count` | ✅ | Get unread count |
+| PUT | `/messages/:id/read` | ✅ | Mark message read |
+| DELETE | `/messages/:id` | ✅ | Delete message |
+| GET | `/search` | ✅ | Search messages |
+| POST | `/typing` | ✅ | Send typing indicator |
+| GET | `/online-status/:userId` | ✅ | Check user online |
+| PUT | `/conversations/:id/mute` | ✅ | Mute conversation |
+| PUT | `/conversations/:id/archive` | ✅ | Archive conversation |
+
+### Notifications (`/api/v1/notifications`) - 12 endpoints
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/` | ✅ | List notifications (with filters) |
+| GET | `/unread-count` | ✅ | Get unread badge count |
+| GET | `/:id` | ✅ | Get single notification |
+| PUT | `/:id/read` | ✅ | Mark as read |
+| PUT | `/read-multiple` | ✅ | Batch mark as read |
+| PUT | `/read-all` | ✅ | Mark all as read |
+| PUT | `/:id/archive` | ✅ | Archive notification |
+| DELETE | `/:id` | ✅ | Delete notification |
+| DELETE | `/bulk` | ✅ | Bulk delete |
+| GET | `/preferences` | ✅ | Get notification preferences |
+| PUT | `/preferences` | ✅ | Update preferences |
+| POST | `/` | ✅ 🔑 | Admin: Create notification |
+
+### Reviews (`/api/v1/reviews`) - 2 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/` | ✅ | Submit review |
 | GET | `/lawyer/:lawyer_id` | ❌ | Get lawyer reviews |
 
-### Cases (`/api/v1/cases`)
+### Cases (`/api/v1/cases`) - 5 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/` | ✅ | Add a case |
@@ -301,41 +387,62 @@ npm start
 | PUT | `/:id` | ✅ | Update case |
 | DELETE | `/:id` | ✅ | Delete case |
 
-### Reminders (`/api/v1/reminders`)
+### Reminders (`/api/v1/reminders`) - 7 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/` | ✅ | Create reminder |
 | GET | `/` | ✅ | List reminders |
 | GET | `/upcoming` | ✅ | Get upcoming reminders |
+| GET | `/:id` | ✅ | Get reminder details |
 | PUT | `/:id` | ✅ | Update reminder |
 | DELETE | `/:id` | ✅ | Delete reminder |
+| POST | `/:id/snooze` | ✅ | Snooze reminder |
 
-### Chatbot (`/api/v1/chatbot`)
+### Chatbot (`/api/v1/chatbot`) - 3 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/query` | ❌ | Send message to AI chatbot |
 | POST | `/cost-estimate` | ❌ | Get legal cost estimate |
 | GET | `/history/:session_id` | ❌ | Get chat history |
 
-### Admin (`/api/v1/admin`)
+### Admin (`/api/v1/admin`) - 29 endpoints
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/dashboard` | ✅ 🔑 | Dashboard stats |
+| GET | `/dashboard/revenue` | ✅ 🔑 | Revenue analytics |
+| GET | `/dashboard/consultations` | ✅ 🔑 | Consultation metrics |
 | GET | `/lawyers` | ✅ 🔑 | List all lawyers |
 | GET | `/lawyers/pending` | ✅ 🔑 | Pending verifications |
+| GET | `/lawyers/:id` | ✅ 🔑 | Lawyer details |
 | PUT | `/lawyers/:id/verify` | ✅ 🔑 | Verify lawyer |
 | PUT | `/lawyers/:id/reject` | ✅ 🔑 | Reject lawyer |
+| PUT | `/lawyers/:id/suspend` | ✅ 🔑 | Suspend lawyer |
+| PUT | `/lawyers/:id/unsuspend` | ✅ 🔑 | Unsuspend lawyer |
+| GET | `/registrations` | ✅ 🔑 | Lawyer registrations |
+| GET | `/registrations/:id` | ✅ 🔑 | Registration details |
+| PUT | `/registrations/:id/approve` | ✅ 🔑 | Approve registration |
+| PUT | `/registrations/:id/reject` | ✅ 🔑 | Reject registration |
+| PUT | `/registrations/:id/request-changes` | ✅ 🔑 | Request changes |
 | GET | `/users` | ✅ 🔑 | List all users |
 | GET | `/users/:id` | ✅ 🔑 | User details |
 | PUT | `/users/:id/ban` | ✅ 🔑 | Ban user |
 | PUT | `/users/:id/unban` | ✅ 🔑 | Unban user |
+| PUT | `/users/:id/role` | ✅ 🔑 | Change user role |
 | GET | `/consultations` | ✅ 🔑 | List all consultations |
+| GET | `/consultations/:id` | ✅ 🔑 | Consultation details |
+| POST | `/consultations/:id/refund` | ✅ 🔑 | Process refund |
+| GET | `/payments` | ✅ 🔑 | Payment history |
 | GET | `/audit-logs` | ✅ 🔑 | View audit logs |
+| GET | `/reports/daily` | ✅ 🔑 | Daily report |
+| GET | `/reports/weekly` | ✅ 🔑 | Weekly report |
+| GET | `/settings` | ✅ 🔑 | Platform settings |
+| PUT | `/settings` | ✅ 🔑 | Update settings |
 
-### Webhooks (`/webhooks`)
+### Webhooks (`/webhooks`) - 2 endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/razorpay` | Razorpay payment webhooks |
+| POST | `/twilio` | Twilio SMS status callbacks |
 
 > **Legend:** ✅ = Auth Required, ❌ = Public, 👨‍⚖️ = Lawyer Only, 🔑 = Admin Only
 
@@ -354,6 +461,31 @@ curl -X GET http://localhost:3000/api/v1/user/profile \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
+## 🔌 WebSocket Events
+
+The API uses Socket.io for real-time features. Connect with authentication:
+
+```javascript
+const socket = io('http://localhost:3000', {
+  auth: { token: 'your-jwt-token' }
+});
+```
+
+### Events
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `chat:message` | ↔️ | Send/receive chat messages |
+| `chat:typing` | ↔️ | Typing indicators |
+| `chat:read` | ↔️ | Read receipts |
+| `notification:new` | ⬇️ | New notification |
+| `notification:count` | ⬇️ | Unread count update |
+| `consultation:status` | ⬇️ | Consultation status change |
+| `meeting:ready` | ⬇️ | Video meeting link ready |
+| `meeting:started` | ⬇️ | Meeting has started |
+| `user:online` | ⬇️ | User came online |
+| `user:offline` | ⬇️ | User went offline |
+
 ## ⚡ Rate Limits
 
 | Endpoint Type | Window | Max Requests |
@@ -363,7 +495,10 @@ curl -X GET http://localhost:3000/api/v1/user/profile \
 | OTP | 1 min | 3 |
 | Search | 1 min | 30 |
 | Chatbot | 1 min | 20 |
+| Chat Messages | 1 min | 60 |
+| File Upload | 1 min | 10 |
 | Admin | 15 min | 200 |
+| Webhooks | No limit | - |
 
 ## 🐳 Docker Deployment
 
@@ -433,6 +568,22 @@ curl http://localhost:3000/health/detailed
 - [ ] Create Supabase storage buckets
 - [ ] Enable Supabase Point-in-Time Recovery
 - [ ] Configure Sentry for error tracking
+- [ ] Set up Redis with password
+- [ ] Configure Jitsi Meet domain (optional)
+- [ ] Run all database migrations
+
+### Environment Variables
+
+```env
+# Required for production
+NODE_ENV=production
+FRONTEND_URL=https://your-frontend.com
+
+# Video Calls (optional - uses 8x8.vc by default)
+JITSI_DOMAIN=meet.jit.si
+JITSI_APP_ID=your-app-id
+JITSI_API_KEY=your-api-key
+```
 
 ### Recommended Platforms
 
@@ -475,6 +626,43 @@ readinessProbe:
 - ✅ Request ID tracing
 - ✅ Audit logging for sensitive actions
 - ✅ Non-root Docker user
+- ✅ JWT token validation
+- ✅ Role-based access control (user/lawyer/admin)
+- ✅ Account deletion with audit trail
+- ✅ GDPR-compliant data export
+
+## 📊 Database Schema
+
+The application uses 15+ tables including:
+
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts and profiles |
+| `lawyers` | Verified lawyer profiles |
+| `lawyer_registration_requests` | Pending lawyer applications |
+| `consultations` | Booked consultations |
+| `consultation_reschedules` | Reschedule history |
+| `payments` | Payment records |
+| `conversations` | Chat conversations |
+| `messages` | Chat messages |
+| `notifications` | In-app notifications |
+| `cases` | User's court cases |
+| `reminders` | Hearing reminders |
+| `reviews` | Lawyer reviews |
+| `audit_logs` | Admin action logs |
+| `chatbot_sessions` | AI chatbot history |
+
+Run migrations in order:
+```bash
+# Via Supabase Dashboard SQL Editor
+database/migrations/001_initial.sql
+database/migrations/002_consultations.sql
+database/migrations/003_chat.sql
+database/migrations/004_video.sql
+database/migrations/005_admin_enhancements.sql
+database/migrations/006_schema_v2.sql
+database/migrations/007_production_features.sql
+```
 
 ## 📄 License
 
@@ -493,6 +681,18 @@ MIT License
 - 📧 Email: raunakj@gmail.com
 - 📖 Docs: [API Documentation](https://docs.nyaaysaathi.com)
 - 🐛 Issues: [GitHub Issues](https://github.com/nyaaysaathi/api/issues)
+
+## 📈 API Stats
+
+| Metric | Value |
+|--------|-------|
+| Total Endpoints | **124** |
+| Route Files | 13 |
+| Controllers | 12 |
+| Services | 10 |
+| Validators | 9 |
+| Database Tables | 15+ |
+| WebSocket Events | 10+ |
 
 ---
 

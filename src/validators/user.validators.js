@@ -101,6 +101,44 @@ const userIdParamSchema = z.object({
   id: uuid,
 });
 
+/**
+ * Request data export (GDPR compliance)
+ */
+const requestDataExportSchema = z.object({
+  format: z.enum(['json', 'csv']).optional().default('json'),
+  include: z.array(z.enum([
+    'profile',
+    'consultations',
+    'payments',
+    'cases',
+    'reviews',
+    'chat_history',
+    'notifications',
+  ])).optional().default(['profile', 'consultations', 'payments']),
+}).strict();
+
+/**
+ * Recover deleted account
+ */
+const recoverAccountSchema = z.object({
+  recovery_token: z.string().min(32).max(100),
+  email: email.optional(),
+  phone: phone.optional(),
+}).strict().refine(
+  data => data.email || data.phone,
+  { message: 'Either email or phone is required for verification' }
+);
+
+/**
+ * Upload avatar schema
+ */
+const uploadAvatarSchema = z.object({
+  crop_x: z.coerce.number().min(0).optional(),
+  crop_y: z.coerce.number().min(0).optional(),
+  crop_width: z.coerce.number().min(50).optional(),
+  crop_height: z.coerce.number().min(50).optional(),
+}).strict().optional();
+
 module.exports = {
   updateProfileSchema,
   changePasswordSchema,
@@ -109,4 +147,7 @@ module.exports = {
   userSearchSchema,
   banUserSchema,
   userIdParamSchema,
+  requestDataExportSchema,
+  recoverAccountSchema,
+  uploadAvatarSchema,
 };

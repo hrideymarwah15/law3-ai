@@ -23,6 +23,7 @@ class UserController {
     this.deleteAccount = this.deleteAccount.bind(this);
     this.getNotificationPreferences = this.getNotificationPreferences.bind(this);
     this.updateNotificationPreferences = this.updateNotificationPreferences.bind(this);
+    this.requestDataExport = this.requestDataExport.bind(this);
   }
 
   /**
@@ -249,6 +250,160 @@ class UserController {
       message: 'Notification preferences updated',
       preferences: filteredPreferences,
     });
+  });
+
+  /**
+   * POST /user/data-export
+   * Request user data export (GDPR compliance)
+   */
+  requestDataExport = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { format = 'json', include = ['profile', 'consultations', 'payments'] } = req.body;
+
+    const exportData = {};
+
+    // Profile data
+    if (include.includes('profile')) {
+      const user = await this.userService.getUserById(userId, { includeProfile: true });
+      exportData.profile = this._formatUserResponse(user);
+    }
+
+    // Consultations
+    if (include.includes('consultations')) {
+      const { data: consultations } = await supabaseAdmin
+        .from('consultations')
+        .select(`
+          id,
+          reference_number,
+          booking_date,
+          booking_time,
+          status,
+          consultation_type,
+          amount,
+          problem_description,
+          notes,
+          created_at,
+          lawyers:lawyer_id(
+            specialization,
+            users:user_id(display_name)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      exportData.consultations = consultations?.map(c => ({
+        reference: c.reference_number,
+        date: c.booking_date,
+        time: c.booking_time,
+        status: c.status,
+        type: c.consultation_type,
+        amount: c.amount,
+        lawyer: c.lawyers?.users?.display_name,
+        specialization: c.lawyers?.specialization,
+        problem: c.problem_description,
+        notes: c.notes,
+        created_at: c.created_at,
+      })) || [];
+    }
+
+    // Payments
+    if (include.includes('payments')) {
+      const { data: payments } = await supabaseAdmin
+        .from('payments')
+        .select('payment_reference, amount, status, payment_method, paid_at, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      exportData.payments = payments || [];
+    }
+
+    // Cases
+    if (include.includes('cases')) {
+      const { data: cases } = await supabaseAdmin
+        .from('cases')
+        .select('case_title, case_number, case_type, status, court_name, next_hearing_date, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      exportData.cases = cases || [];
+    }
+
+    // Reviews
+    if (include.includes('reviews')) {
+      const { data: reviews } = await supabaseAdmin
+        .from('reviews')
+        .select('rating, review_text, created_at, lawyers:lawyer_id(users:user_id(display_name))')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      exportData.reviews = reviews?.map(r => ({
+        rating: r.rating,
+        review: r.review_text,
+        lawyer: r.lawyers?.users?.display_name,
+        created_at: r.created_at,
+      })) || [];
+    }
+
+    // Notifications
+    if (include.includes('notifications')) {
+      const { data: notifications } = await supabaseAdmin
+        .from('notifications')
+        .select('title, body, notification_type, is_read, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      
+      exportData.notifications = notifications || [];
+    }
+
+    // Chat history
+    if (include.includes('chat_history')) {
+      const { data: messages } = await supabaseAdmin
+        .from('chat_messages')
+        .select('content, message_type, created_at, chat_rooms:room_id(id)')
+        .eq('sender_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(500);
+      
+      exportData.chat_history = messages?.map(m => ({
+        content: m.content,
+        type: m.message_type,
+        room_id: m.chat_rooms?.id,
+        sent_at: m.created_at,
+      })) || [];
+    }
+
+    // Add export metadata
+    exportData.export_info = {
+      user_id: userId,
+      exported_at: new Date().toISOString(),
+      format,
+      includes: include,
+    };
+
+    logger.info({
+      message: 'Data export requested',
+      userId,
+      format,
+      includes: include,
+    });
+
+    // For CSV format, we'd need to flatten the data
+    // For now, return JSON
+    if (format === 'csv') {
+      // TODO: Implement CSV conversion
+      res.success({
+        message: 'Data export generated. CSV format coming soon.',
+        data: exportData,
+        format: 'json', // Fallback to JSON for now
+      });
+    } else {
+      res.success({
+        message: 'Data export generated successfully',
+        data: exportData,
+        format: 'json',
+      });
+    }
   });
 
   /**

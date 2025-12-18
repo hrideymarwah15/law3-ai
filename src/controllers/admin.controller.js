@@ -4,6 +4,7 @@ const { cache, redisClient } = require('../config/redis');
 const logger = require('../config/logger');
 const { auditService, AuditActions } = require('../services/audit.service');
 const paymentService = require('../services/payment.service');
+const smsService = require('../services/sms.service');
 
 class AdminController {
   /**
@@ -214,6 +215,32 @@ class AdminController {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
       });
+
+      // Send SMS notification to lawyer
+      try {
+        const { data: lawyerUser } = await supabaseAdmin
+          .from('users')
+          .select('phone, display_name')
+          .eq('id', lawyer_id)
+          .single();
+
+        if (lawyerUser?.phone) {
+          if (status === 'verified') {
+            await smsService.sendLawyerApprovalNotice(
+              lawyerUser.phone,
+              lawyerUser.display_name || 'Advocate'
+            );
+          } else {
+            await smsService.sendLawyerRejectionNotice(
+              lawyerUser.phone,
+              lawyerUser.display_name || 'Advocate',
+              rejection_reason
+            );
+          }
+        }
+      } catch (smsError) {
+        logger.error({ message: 'Lawyer verification SMS failed', error: smsError.message });
+      }
 
       // Clear cache
       await cache.del(`lawyer:profile:${lawyer_id}`);

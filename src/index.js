@@ -34,6 +34,7 @@ const chatRoutes = require('./routes/chat.routes');
 const adminRoutes = require('./routes/admin.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const healthRoutes = require('./routes/health.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
 
@@ -211,6 +212,7 @@ apiRouter.use('/reminders', reminderRoutes);
 apiRouter.use('/chatbot', chatbotRoutes);
 apiRouter.use('/chat', chatRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/notifications', notificationRoutes);
 
 app.use('/api/v1', apiRouter);
 

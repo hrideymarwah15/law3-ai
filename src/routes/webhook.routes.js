@@ -108,16 +108,35 @@ async function handlePaymentCaptured(payment) {
     .eq('id', consultation.user_id)
     .single();
 
-  // Send confirmation SMS
+  // Get lawyer details
+  const { data: lawyer } = await supabaseAdmin
+    .from('lawyers')
+    .select('users:user_id(display_name)')
+    .eq('id', consultation.lawyer_id)
+    .single();
+
+  const lawyerName = lawyer?.users?.display_name || 'your lawyer';
+  const amountInRupees = amount / 100;
+
+  // Send booking confirmation SMS
   if (user?.phone) {
     try {
-      await smsService.sendBookingConfirmation(user.phone, {
-        name: user.display_name,
-        date: consultation.booking_date,
-        time: consultation.booking_time,
-      });
+      await smsService.sendBookingConfirmation(
+        user.phone,
+        lawyerName,
+        consultation.booking_date,
+        consultation.booking_time,
+        amountInRupees
+      );
+
+      // Send payment receipt SMS
+      await smsService.sendPaymentReceipt(
+        user.phone,
+        amountInRupees,
+        consultation.id
+      );
     } catch (smsError) {
-      logger.error({ message: 'Failed to send booking confirmation SMS', error: smsError.message });
+      logger.error({ message: 'Failed to send booking/receipt SMS', error: smsError.message });
     }
   }
 
