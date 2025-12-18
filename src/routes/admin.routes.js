@@ -37,4 +37,10 @@ router.get('/consultations', validate(listConsultations), adminController.listCo
 // Revenue analytics
 router.get('/revenue', validate(revenueAnalytics), adminController.getRevenueAnalytics);
 
+// Audit Logs
+router.get('/audit-logs', adminController.getAuditLogs);
+router.get('/audit-logs/stats', adminController.getAuditStats);
+router.get('/audit-logs/user/:user_id', adminController.getUserAuditLogs);
+router.get('/audit-logs/entity/:entity_type/:entity_id', adminController.getEntityAuditLogs);
+
 module.exports = router;

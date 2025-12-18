@@ -1,0 +1,46 @@
+# Nyaay Saathi Docker Compose - Development
+
+services:
+  # Node.js API Server (Development with hot reload)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: nyaay-saathi-api-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - nyaay-network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: nyaay-saathi-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - nyaay-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  nyaay-network:
+    driver: bridge

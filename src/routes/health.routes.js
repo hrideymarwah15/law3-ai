@@ -35,7 +35,7 @@ router.get('/detailed', async (req, res) => {
   // Check Supabase/PostgreSQL
   try {
     const start = Date.now();
-    const { data, error } = await supabaseAdmin.from('users').select('count').limit(1);
+    const { data, error } = await supabaseAdmin.from('users').select('id').limit(1);
     const latency = Date.now() - start;
 
     checks.dependencies.database = {
@@ -83,7 +83,7 @@ router.get('/ready', async (req, res) => {
   try {
     // Check critical dependencies
     const [dbCheck, redisCheck] = await Promise.all([
-      supabaseAdmin.from('users').select('count').limit(1),
+      supabaseAdmin.from('users').select('id').limit(1),
       redisClient.ping(),
     ]);
 

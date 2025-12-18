@@ -16,7 +16,7 @@ const bookConsultationSchema = {
       'Booking date cannot be in the past'
     ),
     booking_time: time,
-    problem_description: sanitizedText(1000).min(10, 'Please provide at least 10 characters'),
+    problem_description: sanitizedText(1000, 10),
   }),
 };
 

@@ -106,16 +106,18 @@ const sanitizeString = (str) => {
   return str.replace(/<[^>]*>/g, '').trim();
 };
 
-const sanitizedString = (maxLength = 500) =>
+const sanitizedString = (maxLength = 500, minLength = 0) =>
   z
     .string()
-    .max(maxLength)
+    .min(minLength, `Must be at least ${minLength} characters`)
+    .max(maxLength, `Must be less than ${maxLength} characters`)
     .transform(sanitizeString);
 
-const sanitizedText = (maxLength = 5000) =>
+const sanitizedText = (maxLength = 5000, minLength = 0) =>
   z
     .string()
-    .max(maxLength)
+    .min(minLength, `Must be at least ${minLength} characters`)
+    .max(maxLength, `Must be less than ${maxLength} characters`)
     .transform(sanitizeString);
 
 module.exports = {

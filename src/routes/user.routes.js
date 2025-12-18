@@ -10,7 +10,7 @@ const { email, language, sanitizedString, simplePassword } = require('../validat
 
 const updateProfileSchema = {
   body: z.object({
-    name: sanitizedString(100).min(2).optional(),
+    name: sanitizedString(100, 2).optional(),
     email: email.optional(),
     city: sanitizedString(50).optional(),
     language_preference: language.optional(),

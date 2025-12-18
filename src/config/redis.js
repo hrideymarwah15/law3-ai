@@ -127,6 +127,7 @@ const checkRedisConnection = async () => {
 
 module.exports = {
   createRedisClient,
+  redisClient: createRedisClient(),
   cache,
   checkRedisConnection,
 };

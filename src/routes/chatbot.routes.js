@@ -11,7 +11,7 @@ const { language, caseType, sanitizedText } = require('../validators/common.vali
 
 const querySchema = {
   body: z.object({
-    query: sanitizedText(5000).min(1, 'Query is required'),
+    query: sanitizedText(5000, 1),
     language: language,
     session_id: z.string().min(1, 'Session ID is required'),
   }),

@@ -2,6 +2,7 @@ const { supabaseAdmin } = require('../config/supabase');
 const { NotFoundError, ValidationError, ForbiddenError } = require('../middleware/errorHandler');
 const { cache, redisClient } = require('../config/redis');
 const logger = require('../config/logger');
+const { auditService, AuditActions } = require('../services/audit.service');
 
 class AdminController {
   /**
@@ -175,6 +176,13 @@ class AdminController {
         throw new ValidationError('Rejection reason is required');
       }
 
+      // Get current lawyer data for audit
+      const { data: oldData } = await supabaseAdmin
+        .from('lawyers')
+        .select('*')
+        .eq('user_id', lawyer_id)
+        .single();
+
       const updateData = {
         verification_status: status,
         verified_at: status === 'verified' ? new Date().toISOString() : null,
@@ -192,6 +200,18 @@ class AdminController {
       if (error || !updated) {
         throw new NotFoundError('Lawyer profile not found');
       }
+
+      // Log audit event
+      await auditService.log({
+        action: status === 'verified' ? AuditActions.LAWYER_VERIFIED : AuditActions.LAWYER_REJECTED,
+        userId: req.user.id,
+        entityType: 'lawyer',
+        entityId: lawyer_id,
+        oldData: { verification_status: oldData?.verification_status },
+        newData: { verification_status: status, rejection_reason },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
 
       // Clear cache
       await cache.del(`lawyer:profile:${lawyer_id}`);
@@ -330,6 +350,13 @@ class AdminController {
       const { user_id } = req.params;
       const { banned, reason } = req.body;
 
+      // Get current user data for audit
+      const { data: oldData } = await supabaseAdmin
+        .from('users')
+        .select('is_banned, ban_reason')
+        .eq('id', user_id)
+        .single();
+
       // Update user status
       const { data: updated, error } = await supabaseAdmin
         .from('users')
@@ -345,6 +372,18 @@ class AdminController {
       if (error || !updated) {
         throw new NotFoundError('User not found');
       }
+
+      // Log audit event
+      await auditService.log({
+        action: banned ? AuditActions.ADMIN_USER_BAN : AuditActions.ADMIN_USER_UNBAN,
+        userId: req.user.id,
+        entityType: 'user',
+        entityId: user_id,
+        oldData: { is_banned: oldData?.is_banned, ban_reason: oldData?.ban_reason },
+        newData: { is_banned: banned, ban_reason: reason },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
 
       logger.info({
         message: `User ${banned ? 'banned' : 'unbanned'}`,
@@ -480,6 +519,102 @@ class AdminController {
           averagePerDay: Math.round(averagePerDay),
           dailyBreakdown: dailyRevenue,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /admin/audit-logs
+   * Get audit logs with filtering
+   */
+  async getAuditLogs(req, res, next) {
+    try {
+      const {
+        user_id,
+        action,
+        entity_type,
+        entity_id,
+        start_date,
+        end_date,
+        page = 1,
+        limit = 50,
+      } = req.query;
+
+      const result = await auditService.getLogs({
+        userId: user_id,
+        action,
+        entityType: entity_type,
+        entityId: entity_id,
+        startDate: start_date,
+        endDate: end_date,
+        page: parseInt(page),
+        limit: parseInt(limit),
+      });
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /admin/audit-logs/stats
+   * Get audit log statistics
+   */
+  async getAuditStats(req, res, next) {
+    try {
+      const { days = 7 } = req.query;
+
+      const result = await auditService.getStats(parseInt(days));
+
+      res.json({
+        success: true,
+        stats: result.stats,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /admin/audit-logs/user/:user_id
+   * Get audit logs for a specific user
+   */
+  async getUserAuditLogs(req, res, next) {
+    try {
+      const { user_id } = req.params;
+      const { limit = 100 } = req.query;
+
+      const result = await auditService.getUserActivity(user_id, parseInt(limit));
+
+      res.json({
+        success: true,
+        data: result.data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /admin/audit-logs/entity/:entity_type/:entity_id
+   * Get audit trail for a specific entity
+   */
+  async getEntityAuditLogs(req, res, next) {
+    try {
+      const { entity_type, entity_id } = req.params;
+
+      const result = await auditService.getEntityHistory(entity_type, entity_id);
+
+      res.json({
+        success: true,
+        data: result.data,
       });
     } catch (error) {
       next(error);

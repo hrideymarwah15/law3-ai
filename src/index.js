@@ -9,6 +9,16 @@ const morgan = require('morgan');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { requestIdMiddleware } = require('./middleware/requestId');
 const { rateLimiter } = require('./middleware/rateLimiter');
+const { 
+  securityHeaders, 
+  sanitizeRequest, 
+  detectSqlInjection,
+  trackIp,
+  validateContentType,
+  corsPreflightCache,
+  requestTimeout,
+} = require('./middleware/security');
+const { responseEnhancer } = require('./utils/apiResponse');
 const logger = require('./config/logger');
 
 // Import routes
@@ -29,7 +39,13 @@ const app = express();
 // Trust proxy for rate limiting behind load balancer
 app.set('trust proxy', 1);
 
-// Security middleware
+// Disable x-powered-by header
+app.disable('x-powered-by');
+
+// Request timeout (30 seconds)
+app.use(requestTimeout(30000));
+
+// Security middleware - Helmet with strict configuration
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -37,28 +53,103 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
     },
   },
   crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin' },
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  dnsPrefetchControl: { allow: false },
+  frameguard: { action: 'deny' },
+  hidePoweredBy: true,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  ieNoOpen: true,
+  noSniff: true,
+  originAgentCluster: true,
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  xssFilter: true,
 }));
 
-// CORS configuration
+// Additional security headers
+app.use(securityHeaders);
+
+// CORS configuration with strict origin validation
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? [
+      process.env.FRONTEND_URL,
+      'https://nyaaysaathi.com',
+      'https://app.nyaaysaathi.com',
+      'https://www.nyaaysaathi.com',
+    ].filter(Boolean)
+  : [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:5173',
+    ];
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://nyaaysaathi.com', 'https://app.nyaaysaathi.com']
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.) in development
+    if (!origin && process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn({ message: 'CORS blocked', origin });
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
-  exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Request-ID',
+    'X-API-Key',
+    'Accept',
+    'Accept-Language',
+  ],
+  exposedHeaders: [
+    'X-Request-ID',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'Retry-After',
+  ],
+  maxAge: 86400, // 24 hours
+  optionsSuccessStatus: 204,
 };
+
 app.use(cors(corsOptions));
+app.use(corsPreflightCache);
 
-// Request parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Request parsing with size limits
+app.use(express.json({ 
+  limit: '1mb',
+  strict: true,
+  type: 'application/json',
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '1mb',
+  parameterLimit: 100,
+}));
 
-// Compression
+// Compression (skip for small responses)
 app.use(compression({
   level: 6,
   threshold: 1024,
@@ -73,20 +164,37 @@ app.use(compression({
 // Request ID for tracing
 app.use(requestIdMiddleware);
 
+// Response enhancer (adds helper methods to res)
+app.use(responseEnhancer);
+
 // HTTP request logging
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('combined', {
+  app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
     stream: { write: (message) => logger.info(message.trim()) },
+    skip: (req) => req.path === '/health' || req.path === '/health/live',
   }));
 }
+
+// IP tracking for abuse detection
+app.use(trackIp);
+
+// Content-Type validation
+app.use(validateContentType);
+
+// Request sanitization (XSS prevention)
+app.use(sanitizeRequest);
+
+// SQL injection detection
+app.use(detectSqlInjection);
 
 // Rate limiting (applied globally, specific limits in routes)
 app.use(rateLimiter.general);
 
-// Health check routes (no auth required)
+// Health check routes (no auth required, minimal processing)
 app.use('/health', healthRoutes);
 
 // Webhook routes (special handling, placed before general routes)
+// Note: Webhooks need raw body for signature verification
 app.use('/webhooks', webhookRoutes);
 
 // API routes
@@ -112,7 +220,7 @@ app.get('/api/docs', (req, res) => {
 // 404 handler
 app.use(notFoundHandler);
 
-// Global error handler
+// Global error handler (must be last)
 app.use(errorHandler);
 
 // Start server
@@ -148,7 +256,8 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
+  console.error(error.stack);
   process.exit(1);
 });
 

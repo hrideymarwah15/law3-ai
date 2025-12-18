@@ -91,7 +91,7 @@ class OtpService {
 
       const message = `${purposeMessages[purpose] || 'Your OTP is'}: ${otpCode}. Valid for ${this.OTP_EXPIRY_MINUTES} minutes. Do not share this code.`;
 
-      const smsResult = await smsService.sendSms(phone, message);
+      const smsResult = await smsService.sendSMS(phone, message);
 
       if (!smsResult.success) {
         logger.error({ message: 'Failed to send OTP SMS', phone, error: smsResult.error });

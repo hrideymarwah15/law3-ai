@@ -6,7 +6,7 @@ const signupSchema = {
     email: email.optional(),
     phone: phone.optional(),
     password: simplePassword,
-    name: sanitizedString(100).min(2, 'Name must be at least 2 characters'),
+    name: sanitizedString(100, 2),
     signup_method: z.enum(['email', 'phone']),
   }).refine(
     (data) => {
@@ -63,7 +63,7 @@ const resetPasswordSchema = {
 
 const completeProfileSchema = {
   body: z.object({
-    name: sanitizedString(100).min(2).optional(),
+    name: sanitizedString(100, 2).optional(),
     city: sanitizedString(50).optional(),
     language_preference: language.optional(),
   }),
