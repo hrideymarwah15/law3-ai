@@ -105,7 +105,7 @@ class ReviewController {
           review_text,
           created_at,
           is_verified,
-          users!inner(name)
+          users:user_id(first_name, display_name)
         `, { count: 'exact' })
         .eq('lawyer_id', lawyer_id)
         .order('created_at', { ascending: false })
@@ -121,7 +121,7 @@ class ReviewController {
         average_rating: parseFloat(lawyer?.rating) || 0,
         reviews: reviews.map(r => ({
           id: r.id,
-          user_name: r.users?.name?.split(' ')[0] || 'Anonymous',
+          user_name: r.users?.first_name || r.users?.display_name || 'Anonymous',
           rating: r.rating,
           review_text: r.review_text,
           created_at: r.created_at,

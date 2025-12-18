@@ -11,12 +11,23 @@ class AuthController {
    */
   async signup(req, res, next) {
     try {
-      const { email, phone, password, name, signup_method } = req.body;
+      const { email, phone, password, name, first_name, last_name, signup_method } = req.body;
+
+      // Support both legacy 'name' field and new first_name/last_name
+      let finalFirstName = first_name;
+      let finalLastName = last_name;
+      
+      if (!first_name && name) {
+        // Split legacy name into first_name/last_name
+        const nameParts = name.trim().split(/\s+/);
+        finalFirstName = nameParts[0];
+        finalLastName = nameParts.slice(1).join(' ') || null;
+      }
 
       const signupData = {
         password,
         options: {
-          data: { name },
+          data: { first_name: finalFirstName, last_name: finalLastName },
         },
       };
 
@@ -109,8 +120,10 @@ class AuthController {
           email: data.user.email,
           phone: data.user.phone,
           role: profile?.role || 'user',
-          name: profile?.name,
-          is_verified: profile?.is_verified,
+          first_name: profile?.first_name,
+          last_name: profile?.last_name,
+          display_name: profile?.display_name,
+          is_verified: profile?.is_verified || profile?.is_email_verified || profile?.is_phone_verified,
         },
       });
     } catch (error) {
@@ -235,9 +248,11 @@ class AuthController {
         user: {
           id: user.id,
           phone: user.phone,
-          name: user.name,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          display_name: user.display_name,
           role: user.role || 'user',
-          is_new: isNewUser || !user.name,
+          is_new: isNewUser || !user.first_name,
         },
         // Note: In production, implement proper session management
         // This may require additional token generation logic
@@ -349,11 +364,16 @@ class AuthController {
           id: req.user.id,
           email: req.user.email,
           phone: req.user.phone,
-          name: req.user.name,
+          first_name: req.user.first_name,
+          last_name: req.user.last_name,
+          display_name: req.user.display_name,
           role: req.user.role,
+          status: req.user.status,
           city: req.user.city,
-          language_preference: req.user.language_preference,
-          is_verified: req.user.is_verified,
+          state: req.user.state,
+          preferred_language: req.user.preferred_language,
+          is_email_verified: req.user.is_email_verified,
+          is_phone_verified: req.user.is_phone_verified,
           avatar_url: req.user.avatar_url,
           created_at: req.user.created_at,
         },
@@ -422,12 +442,14 @@ class AuthController {
    */
   async completeProfile(req, res, next) {
     try {
-      const { name, city, language_preference } = req.body;
+      const { first_name, last_name, city, state, preferred_language } = req.body;
 
       const updateData = {};
-      if (name) updateData.name = name;
+      if (first_name) updateData.first_name = first_name;
+      if (last_name) updateData.last_name = last_name;
       if (city) updateData.city = city;
-      if (language_preference) updateData.language_preference = language_preference;
+      if (state) updateData.state = state;
+      if (preferred_language) updateData.preferred_language = preferred_language;
       updateData.updated_at = new Date().toISOString();
 
       const { data, error } = await supabaseAdmin

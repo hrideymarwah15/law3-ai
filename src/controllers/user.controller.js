@@ -1,109 +1,282 @@
+/**
+ * User Controller
+ * 
+ * Handles HTTP requests for user-related operations.
+ * Delegates business logic to UserService.
+ * 
+ * Pattern: Thin Controller → Service → Repository
+ */
+
 const { supabaseAdmin } = require('../config/supabase');
-const { ValidationError } = require('../middleware/errorHandler');
+const { ValidationError, UnauthorizedError } = require('../middleware/errorHandler');
+const { asyncHandler } = require('../utils/asyncHandler');
+const { services } = require('../services');
 const logger = require('../config/logger');
 
 class UserController {
+  constructor() {
+    // Bind methods to preserve 'this' context when used as route handlers
+    this.getProfile = this.getProfile.bind(this);
+    this.getProfileById = this.getProfileById.bind(this);
+    this.updateProfile = this.updateProfile.bind(this);
+    this.changePassword = this.changePassword.bind(this);
+    this.deleteAccount = this.deleteAccount.bind(this);
+    this.getNotificationPreferences = this.getNotificationPreferences.bind(this);
+    this.updateNotificationPreferences = this.updateNotificationPreferences.bind(this);
+  }
+
+  /**
+   * Get service instance (lazy loaded)
+   * @private
+   */
+  get userService() {
+    return services.userService;
+  }
+
   /**
    * GET /user/profile
-   * Get current user profile
+   * Get current user's profile
    */
-  async getProfile(req, res, next) {
-    try {
-      res.json({
-        success: true,
-        user: {
-          id: req.user.id,
-          phone: req.user.phone,
-          email: req.user.email,
-          name: req.user.name,
-          city: req.user.city,
-          language_preference: req.user.language_preference,
-          avatar_url: req.user.avatar_url,
-          role: req.user.role,
-          is_verified: req.user.is_verified,
-          created_at: req.user.created_at,
-        },
-      });
-    } catch (error) {
-      next(error);
+  getProfile = asyncHandler(async (req, res) => {
+    const user = await this.userService.getUserById(req.user.id, {
+      includeProfile: true,
+    });
+
+    res.success({
+      user: this._formatUserResponse(user),
+    });
+  });
+
+  /**
+   * GET /user/profile/:id
+   * Get user profile by ID (admin or self only)
+   */
+  getProfileById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const requesterId = req.user.id;
+    const isAdmin = req.user.role === 'admin';
+
+    // Only allow access to own profile or admin access
+    if (id !== requesterId && !isAdmin) {
+      throw new UnauthorizedError('You can only view your own profile');
     }
-  }
+
+    const user = await this.userService.getUserById(id, {
+      includeProfile: true,
+    });
+
+    res.success({
+      user: this._formatUserResponse(user),
+    });
+  });
 
   /**
    * PUT /user/profile
-   * Update user profile
+   * Update current user's profile
    */
-  async updateProfile(req, res, next) {
-    try {
-      const { name, email, city, language_preference } = req.body;
-      const userId = req.user.id;
+  updateProfile = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { name, email, city, language_preference, phone, avatar_url } = req.body;
 
-      const updateData = { updated_at: new Date().toISOString() };
-      if (name !== undefined) updateData.name = name;
-      if (email !== undefined) updateData.email = email;
-      if (city !== undefined) updateData.city = city;
-      if (language_preference !== undefined) updateData.language_preference = language_preference;
-
-      const { data, error } = await supabaseAdmin
-        .from('users')
-        .update(updateData)
-        .eq('id', userId)
-        .select()
-        .single();
-
-      if (error) {
-        throw new ValidationError(error.message);
+    // Validate email uniqueness if changing
+    if (email && email !== req.user.email) {
+      const isAvailable = await this.userService.isEmailAvailable(email, userId);
+      if (!isAvailable) {
+        throw new ValidationError('Email is already in use');
       }
-
-      logger.info({ message: 'Profile updated', userId });
-
-      res.json({
-        success: true,
-        message: 'Profile updated successfully',
-        user: data,
-      });
-    } catch (error) {
-      next(error);
     }
-  }
+
+    // Validate phone uniqueness if changing
+    if (phone && phone !== req.user.phone) {
+      const isAvailable = await this.userService.isPhoneAvailable(phone, userId);
+      if (!isAvailable) {
+        throw new ValidationError('Phone number is already in use');
+      }
+    }
+
+    const updateData = {};
+    if (name !== undefined) updateData.first_name = name.split(' ')[0];
+    if (name !== undefined && name.split(' ').length > 1) {
+      updateData.last_name = name.split(' ').slice(1).join(' ');
+    }
+    if (email !== undefined) updateData.email = email;
+    if (city !== undefined) updateData.city = city;
+    if (language_preference !== undefined) {
+      updateData.preferred_language = language_preference;
+    }
+    if (phone !== undefined) updateData.phone = phone;
+    if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+
+    const updated = await this.userService.updateProfile(userId, updateData);
+
+    logger.info({ 
+      message: 'Profile updated', 
+      userId, 
+      fields: Object.keys(updateData),
+    });
+
+    res.success({
+      message: 'Profile updated successfully',
+      user: this._formatUserResponse(updated),
+    });
+  });
 
   /**
    * PUT /user/change-password
-   * Change user password
+   * Change current user's password
    */
-  async changePassword(req, res, next) {
-    try {
-      const { current_password, new_password } = req.body;
+  changePassword = asyncHandler(async (req, res) => {
+    const { current_password, new_password } = req.body;
+    const userId = req.user.id;
 
-      // Verify current password by re-authenticating
-      const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-        email: req.user.email,
-        password: current_password,
-      });
-
-      if (signInError) {
-        throw new ValidationError('Current password is incorrect');
-      }
-
-      // Update password
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        req.user.id,
-        { password: new_password }
-      );
-
-      if (updateError) {
-        throw new ValidationError(updateError.message);
-      }
-
-      logger.info({ message: 'Password changed', userId: req.user.id });
-
-      res.json({
-        success: true,
-        message: 'Password changed successfully',
-      });
-    } catch (error) {
-      next(error);
+    // Validate password requirements
+    if (!new_password || new_password.length < 8) {
+      throw new ValidationError('New password must be at least 8 characters');
     }
+
+    if (!/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) || !/[0-9]/.test(new_password)) {
+      throw new ValidationError(
+        'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+      );
+    }
+
+    // Verify current password by re-authenticating
+    const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+      email: req.user.email,
+      password: current_password,
+    });
+
+    if (signInError) {
+      logger.warn({ 
+        message: 'Failed password change - incorrect current password', 
+        userId,
+      });
+      throw new ValidationError('Current password is incorrect');
+    }
+
+    // Update password
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { password: new_password }
+    );
+
+    if (updateError) {
+      throw new ValidationError(updateError.message);
+    }
+
+    logger.info({ message: 'Password changed', userId });
+
+    res.success({
+      message: 'Password changed successfully',
+    });
+  });
+
+  /**
+   * DELETE /user/account
+   * Delete current user's account (soft delete)
+   */
+  deleteAccount = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const { reason, confirmation } = req.body;
+
+    // Require explicit confirmation
+    if (confirmation !== 'DELETE_MY_ACCOUNT') {
+      throw new ValidationError(
+        'Please confirm account deletion by sending confirmation: "DELETE_MY_ACCOUNT"'
+      );
+    }
+
+    await this.userService.deleteAccount(userId, reason || 'User requested');
+
+    logger.info({ 
+      message: 'Account deleted', 
+      userId, 
+      reason: reason || 'User requested',
+    });
+
+    res.success({
+      message: 'Account has been scheduled for deletion',
+    });
+  });
+
+  /**
+   * GET /user/notifications/preferences
+   * Get notification preferences
+   */
+  getNotificationPreferences = asyncHandler(async (req, res) => {
+    const user = await this.userService.getUserById(req.user.id);
+
+    res.success({
+      preferences: user.notification_preferences || {
+        email: true,
+        sms: true,
+        push: true,
+        marketing: false,
+        consultation_reminders: true,
+        case_updates: true,
+      },
+    });
+  });
+
+  /**
+   * PUT /user/notifications/preferences
+   * Update notification preferences
+   */
+  updateNotificationPreferences = asyncHandler(async (req, res) => {
+    const userId = req.user.id;
+    const preferences = req.body;
+
+    // Validate preference structure
+    const validKeys = ['email', 'sms', 'push', 'marketing', 'consultation_reminders', 'case_updates'];
+    const filteredPreferences = {};
+    
+    for (const key of validKeys) {
+      if (typeof preferences[key] === 'boolean') {
+        filteredPreferences[key] = preferences[key];
+      }
+    }
+
+    await this.userService.updateProfile(userId, {
+      notification_preferences: filteredPreferences,
+    });
+
+    logger.info({ 
+      message: 'Notification preferences updated', 
+      userId,
+    });
+
+    res.success({
+      message: 'Notification preferences updated',
+      preferences: filteredPreferences,
+    });
+  });
+
+  /**
+   * Format user data for API response
+   * @private
+   */
+  _formatUserResponse(user) {
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      name: user.first_name 
+        ? `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`
+        : user.name,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      city: user.city,
+      state: user.state,
+      language_preference: user.preferred_language || user.language_preference,
+      avatar_url: user.avatar_url,
+      role: user.role,
+      is_verified: user.is_verified,
+      is_banned: user.is_banned,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+    };
   }
 }
 

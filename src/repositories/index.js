@@ -1,18 +1,18 @@
 /**
  * Repository Index
- * Export all repositories from single point
+ * Export all repository classes from single point
  * 
  * @module repositories
  */
 
 const BaseRepository = require('./base.repository');
-const userRepository = require('./user.repository');
-const lawyerRepository = require('./lawyer.repository');
-const consultationRepository = require('./consultation.repository');
+const UserRepository = require('./user.repository');
+const LawyerRepository = require('./lawyer.repository');
+const ConsultationRepository = require('./consultation.repository');
 
 module.exports = {
   BaseRepository,
-  userRepository,
-  lawyerRepository,
-  consultationRepository,
+  UserRepository,
+  LawyerRepository,
+  ConsultationRepository,
 };

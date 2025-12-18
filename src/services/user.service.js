@@ -238,11 +238,16 @@ class UserService extends BaseService {
       'phone',
       'avatar_url',
       'preferred_language',
+      'timezone',
       'notification_preferences',
-      'address',
+      'address_line1',
+      'address_line2',
       'city',
       'state',
+      'country',
       'pincode',
+      'date_of_birth',
+      'gender',
     ];
 
     const sanitized = {};

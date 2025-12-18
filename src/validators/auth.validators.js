@@ -6,7 +6,10 @@ const signupSchema = {
     email: email.optional(),
     phone: phone.optional(),
     password: simplePassword,
-    name: sanitizedString(100, 2),
+    // Support both legacy 'name' field and new first_name/last_name
+    name: sanitizedString(100, 2).optional(),
+    first_name: sanitizedString(50, 1).optional(),
+    last_name: sanitizedString(50, 1).optional(),
     signup_method: z.enum(['email', 'phone']),
   }).refine(
     (data) => {
@@ -15,6 +18,9 @@ const signupSchema = {
       return false;
     },
     { message: 'Email or phone required based on signup method' }
+  ).refine(
+    (data) => data.name || data.first_name,
+    { message: 'Either name or first_name is required' }
   ),
 };
 

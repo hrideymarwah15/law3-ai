@@ -34,9 +34,11 @@ class LawyerRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        users!inner (
+        users:user_id (
           id,
-          name,
+          first_name,
+          last_name,
+          display_name,
           email,
           phone,
           avatar_url,
@@ -81,8 +83,10 @@ class LawyerRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        users!inner (
-          name,
+        users:user_id (
+          first_name,
+          last_name,
+          display_name,
           avatar_url,
           city,
           state
@@ -266,8 +270,10 @@ class LawyerRepository extends BaseRepository {
         rating,
         total_reviews,
         consultation_fee,
-        users!inner (
-          name,
+        users:user_id (
+          first_name,
+          last_name,
+          display_name,
           avatar_url,
           city
         )
@@ -285,4 +291,4 @@ class LawyerRepository extends BaseRepository {
   }
 }
 
-module.exports = new LawyerRepository();
+module.exports = LawyerRepository;

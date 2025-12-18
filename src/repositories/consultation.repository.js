@@ -25,19 +25,23 @@ class ConsultationRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        users!consultations_user_id_fkey (
+        users:user_id (
           id,
-          name,
+          first_name,
+          last_name,
+          display_name,
           email,
           phone,
           avatar_url
         ),
-        lawyers!inner (
+        lawyers:lawyer_id (
           id,
           specialization,
           consultation_fee,
-          users!inner (
-            name,
+          users:user_id (
+            first_name,
+            last_name,
+            display_name,
             email,
             phone,
             avatar_url
@@ -77,11 +81,11 @@ class ConsultationRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        lawyers!inner (
+        lawyers:lawyer_id (
           id,
           specialization,
-          users!inner (
-            name,
+          users:user_id (
+            display_name,
             avatar_url
           )
         )
@@ -115,9 +119,11 @@ class ConsultationRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        users!consultations_user_id_fkey (
+        users:user_id (
           id,
-          name,
+          first_name,
+          last_name,
+          display_name,
           email,
           phone,
           avatar_url
@@ -175,10 +181,10 @@ class ConsultationRepository extends BaseRepository {
       .from(this.tableName)
       .select(`
         *,
-        lawyers!inner (
+        lawyers:lawyer_id (
           id,
-          users!inner (
-            name,
+          users:user_id (
+            display_name,
             avatar_url
           )
         )
@@ -291,4 +297,4 @@ class ConsultationRepository extends BaseRepository {
   }
 }
 
-module.exports = new ConsultationRepository();
+module.exports = ConsultationRepository;

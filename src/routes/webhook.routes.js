@@ -104,7 +104,7 @@ async function handlePaymentCaptured(payment) {
   // Get user details for notification
   const { data: user } = await supabaseAdmin
     .from('users')
-    .select('phone, name')
+    .select('phone, display_name')
     .eq('id', consultation.user_id)
     .single();
 
@@ -112,7 +112,7 @@ async function handlePaymentCaptured(payment) {
   if (user?.phone) {
     try {
       await smsService.sendBookingConfirmation(user.phone, {
-        name: user.name,
+        name: user.display_name,
         date: consultation.booking_date,
         time: consultation.booking_time,
       });
@@ -218,7 +218,7 @@ async function handleRefundProcessed(refund) {
     // Get user for notification
     const { data: user } = await supabaseAdmin
       .from('users')
-      .select('phone, name')
+      .select('phone, display_name')
       .eq('id', consultation.user_id)
       .single();
 
@@ -227,7 +227,7 @@ async function handleRefundProcessed(refund) {
       try {
         await smsService.sendSMS(
           user.phone,
-          `Hi ${user.name}, your refund of ₹${amount / 100} has been processed. It will reflect in your account within 5-7 business days. - Nyaay Saathi`
+          `Hi ${user.display_name}, your refund of ₹${amount / 100} has been processed. It will reflect in your account within 5-7 business days. - Nyaay Saathi`
         );
       } catch (smsError) {
         logger.error({ message: 'Failed to send refund SMS', error: smsError.message });

@@ -41,7 +41,7 @@ class LawyerController {
           rating,
           total_reviews,
           is_available,
-          users!inner(name, city)
+          users:user_id(first_name, last_name, display_name, city)
         `, { count: 'exact' })
         .eq('is_verified', true);
 
@@ -78,7 +78,9 @@ class LawyerController {
       // Transform data
       const lawyers = data.map(lawyer => ({
         id: lawyer.id,
-        name: lawyer.users?.name,
+        first_name: lawyer.users?.first_name,
+        last_name: lawyer.users?.last_name,
+        display_name: lawyer.users?.display_name,
         city: lawyer.users?.city,
         profile_photo_url: lawyer.profile_photo_url,
         specialization: lawyer.specialization,
@@ -125,7 +127,7 @@ class LawyerController {
         .from('lawyers')
         .select(`
           *,
-          users!inner(name, email, city, avatar_url)
+          users:user_id(first_name, last_name, display_name, email, city, avatar_url)
         `)
         .eq('id', lawyer_id)
         .eq('is_verified', true)
@@ -143,7 +145,7 @@ class LawyerController {
           rating,
           review_text,
           created_at,
-          users!inner(name)
+          users:user_id(first_name, display_name)
         `)
         .eq('lawyer_id', lawyer_id)
         .order('created_at', { ascending: false })
@@ -151,7 +153,9 @@ class LawyerController {
 
       const result = {
         id: lawyer.id,
-        name: lawyer.users?.name,
+        first_name: lawyer.users?.first_name,
+        last_name: lawyer.users?.last_name,
+        display_name: lawyer.users?.display_name,
         email: lawyer.users?.email,
         city: lawyer.users?.city,
         profile_photo_url: lawyer.profile_photo_url || lawyer.users?.avatar_url,
@@ -166,7 +170,7 @@ class LawyerController {
         bar_council_number: lawyer.bar_council_number,
         reviews: reviews?.map(r => ({
           id: r.id,
-          user_name: r.users?.name?.split(' ')[0] || 'Anonymous',
+          user_name: r.users?.first_name || r.users?.display_name || 'Anonymous',
           rating: r.rating,
           review_text: r.review_text,
           created_at: r.created_at,

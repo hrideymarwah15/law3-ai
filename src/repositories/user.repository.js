@@ -120,7 +120,7 @@ class UserRepository extends BaseRepository {
     let dbQuery = this.db
       .from(this.tableName)
       .select('*', { count: 'exact' })
-      .or(`name.ilike.%${query}%,email.ilike.%${query}%`);
+      .or(`display_name.ilike.%${query}%,email.ilike.%${query}%,first_name.ilike.%${query}%,last_name.ilike.%${query}%`);
 
     if (role) {
       dbQuery = dbQuery.eq('role', role);
@@ -182,4 +182,4 @@ class UserRepository extends BaseRepository {
   }
 }
 
-module.exports = new UserRepository();
+module.exports = UserRepository;

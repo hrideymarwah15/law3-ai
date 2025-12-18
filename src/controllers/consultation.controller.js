@@ -24,7 +24,7 @@ class ConsultationController {
       // Check lawyer exists and is available
       const { data: lawyer, error: lawyerError } = await supabaseAdmin
         .from('lawyers')
-        .select('*, users!inner(name, phone)')
+        .select('*, users:user_id(display_name, phone)')
         .eq('id', lawyer_id)
         .eq('is_verified', true)
         .eq('is_available', true)
@@ -134,7 +134,7 @@ class ConsultationController {
       // Verify consultation exists and belongs to user
       const { data: consultation, error: consultationError } = await supabaseAdmin
         .from('consultations')
-        .select('*, lawyers!inner(*, users!inner(name, phone))')
+        .select('*, lawyers:lawyer_id(*, users:user_id(display_name, phone))')
         .eq('id', consultation_id)
         .eq('user_id', userId)
         .single();
@@ -200,7 +200,7 @@ class ConsultationController {
       try {
         await smsService.sendBookingConfirmation(
           req.user.phone,
-          consultation.lawyers.users.name,
+          consultation.lawyers.users.display_name,
           consultation.booking_date,
           consultation.booking_time,
           consultation.amount
@@ -245,10 +245,10 @@ class ConsultationController {
         .from('consultations')
         .select(`
           *,
-          lawyers!inner(
+          lawyers:lawyer_id(
             id,
             specialization,
-            users!inner(name, avatar_url)
+            users:user_id(display_name, avatar_url)
           )
         `, { count: 'exact' })
         .eq('user_id', userId);
@@ -284,7 +284,7 @@ class ConsultationController {
             id: c.id,
             lawyer: {
               id: c.lawyers.id,
-              name: c.lawyers.users.name,
+              display_name: c.lawyers.users.display_name,
               avatar_url: c.lawyers.users.avatar_url,
               specialization: c.lawyers.specialization,
             },
@@ -421,7 +421,7 @@ class ConsultationController {
       // Fetch consultation
       const { data: consultation, error: fetchError } = await supabaseAdmin
         .from('consultations')
-        .select('*, lawyers!inner(user_id)')
+        .select('*, lawyers:lawyer_id(user_id)')
         .eq('id', consultation_id)
         .single();
 

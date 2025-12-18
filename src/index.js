@@ -223,42 +223,53 @@ app.use(notFoundHandler);
 // Global error handler (must be last)
 app.use(errorHandler);
 
+// Import graceful shutdown handler
+const { gracefulShutdown, registerDefaultCleanups } = require('./utils/gracefulShutdown');
+
+// Register default cleanup handlers
+registerDefaultCleanups();
+
+// Initialize DI container
+const { container } = require('./services');
+
 // Start server
 const PORT = process.env.PORT || 3000;
 
-const server = app.listen(PORT, () => {
-  logger.info(`🚀 Nyaay Saathi API server running on port ${PORT}`);
-  logger.info(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`🔗 API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
-});
+const startServer = async () => {
+  try {
+    // Initialize service container
+    container.initialize();
+    logger.info('Service container initialized');
 
-// Graceful shutdown
-const gracefulShutdown = (signal) => {
-  logger.info(`${signal} received. Shutting down gracefully...`);
-  server.close(() => {
-    logger.info('HTTP server closed.');
-    process.exit(0);
-  });
+    // Start HTTP server
+    const server = app.listen(PORT, () => {
+      logger.info(`🚀 Nyaay Saathi API server running on port ${PORT}`);
+      logger.info(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`🔗 API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
+      logger.info(`📊 Request timeout: 30s`);
+      logger.info(`🔒 Security middleware: enabled`);
+    });
 
-  // Force close after 30 seconds
-  setTimeout(() => {
-    logger.error('Could not close connections in time, forcefully shutting down');
+    // Configure keep-alive timeouts
+    server.keepAliveTimeout = 65000; // Should be higher than load balancer timeout
+    server.headersTimeout = 66000;
+
+    // Initialize graceful shutdown with server
+    gracefulShutdown.init(server, {
+      timeout: parseInt(process.env.SHUTDOWN_TIMEOUT, 10) || 30000,
+    });
+
+    // Add shutdown middleware (reject requests during shutdown)
+    app.use(gracefulShutdown.middleware());
+
+    return server;
+  } catch (error) {
+    logger.fatal({ message: 'Failed to start server', error: error.message, stack: error.stack });
     process.exit(1);
-  }, 30000);
+  }
 };
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  console.error(error.stack);
-  process.exit(1);
-});
+// Start the server
+startServer();
 
 module.exports = app;
