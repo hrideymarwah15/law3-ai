@@ -490,7 +490,7 @@ MIT License
 
 ## 🆘 Support
 
-- 📧 Email: support@nyaaysaathi.com
+- 📧 Email: raunakj@gmail.com
 - 📖 Docs: [API Documentation](https://docs.nyaaysaathi.com)
 - 🐛 Issues: [GitHub Issues](https://github.com/nyaaysaathi/api/issues)
 

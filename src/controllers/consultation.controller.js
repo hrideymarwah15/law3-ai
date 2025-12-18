@@ -3,6 +3,7 @@ const { cache } = require('../config/redis');
 const paymentService = require('../services/payment.service');
 const videoService = require('../services/video.service');
 const smsService = require('../services/sms.service');
+const meetingScheduler = require('../services/meeting-scheduler.service');
 const { 
   NotFoundError, 
   ValidationError, 
@@ -462,6 +463,266 @@ class ConsultationController {
         success: true,
         message: 'Consultation marked as completed',
         consultation: updated,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /consultations/upcoming-video
+   * Get upcoming video consultations for user or lawyer dashboard
+   */
+  async getUpcomingVideoConsultations(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const userRole = req.user.role;
+      const { hours = 24 } = req.query; // Default: next 24 hours
+
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().slice(0, 5);
+
+      // Calculate end date/time (X hours from now)
+      const endDate = new Date(now.getTime() + parseInt(hours) * 60 * 60 * 1000);
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      let query = supabaseAdmin
+        .from('consultations')
+        .select(`
+          id,
+          booking_date,
+          booking_time,
+          consultation_type,
+          status,
+          meeting_link,
+          meeting_provider,
+          meeting_link_generated_at,
+          problem_description,
+          amount,
+          user_id,
+          lawyer_id,
+          users:user_id(id, display_name, email, phone, avatar_url),
+          lawyers:lawyer_id(
+            id,
+            user_id,
+            specialization,
+            profile_photo_url,
+            users:user_id(id, display_name, email, phone)
+          )
+        `)
+        .eq('status', 'confirmed')
+        .eq('consultation_type', 'video')
+        .gte('booking_date', today)
+        .lte('booking_date', endDateStr)
+        .order('booking_date', { ascending: true })
+        .order('booking_time', { ascending: true });
+
+      // Filter by role
+      if (userRole === 'lawyer' && req.user.lawyerProfile) {
+        query = query.eq('lawyer_id', req.user.lawyerProfile.id);
+      } else if (userRole === 'user') {
+        query = query.eq('user_id', userId);
+      } else if (userRole === 'admin') {
+        // Admin sees all
+      } else {
+        query = query.eq('user_id', userId);
+      }
+
+      const { data: consultations, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      // Filter out past consultations for today
+      const upcomingConsultations = consultations.filter(c => {
+        if (c.booking_date > today) return true;
+        if (c.booking_date === today && c.booking_time >= currentTime) return true;
+        return false;
+      });
+
+      // Calculate time until each consultation
+      const consultationsWithTiming = upcomingConsultations.map(c => {
+        const consultationDateTime = new Date(`${c.booking_date}T${c.booking_time}:00`);
+        const minutesUntil = Math.round((consultationDateTime - now) / (1000 * 60));
+        
+        return {
+          id: c.id,
+          booking_date: c.booking_date,
+          booking_time: c.booking_time,
+          status: c.status,
+          consultation_type: c.consultation_type,
+          meeting_link: c.meeting_link,
+          meeting_provider: c.meeting_provider,
+          is_meeting_link_ready: !!c.meeting_link,
+          meeting_link_generated_at: c.meeting_link_generated_at,
+          problem_description: c.problem_description,
+          amount: c.amount,
+          minutes_until_start: minutesUntil,
+          can_join: minutesUntil <= 5 && minutesUntil >= -30, // Can join 5 min before to 30 min after
+          is_starting_soon: minutesUntil <= 10 && minutesUntil > 0,
+          user: userRole === 'lawyer' ? {
+            id: c.users?.id,
+            display_name: c.users?.display_name,
+            avatar_url: c.users?.avatar_url
+          } : null,
+          lawyer: userRole !== 'lawyer' ? {
+            id: c.lawyers?.id,
+            display_name: c.lawyers?.users?.display_name,
+            specialization: c.lawyers?.specialization,
+            profile_photo_url: c.lawyers?.profile_photo_url
+          } : null
+        };
+      });
+
+      res.json({
+        success: true,
+        count: consultationsWithTiming.length,
+        consultations: consultationsWithTiming
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /consultations/:consultation_id/meeting
+   * Get meeting details for a specific consultation
+   */
+  async getMeetingDetails(req, res, next) {
+    try {
+      const { consultation_id } = req.params;
+      const userId = req.user.id;
+
+      const { data: consultation, error } = await supabaseAdmin
+        .from('consultations')
+        .select(`
+          id,
+          booking_date,
+          booking_time,
+          consultation_type,
+          status,
+          meeting_link,
+          meeting_provider,
+          meeting_room_name,
+          meeting_link_generated_at,
+          user_id,
+          lawyer_id,
+          users:user_id(id, display_name, email),
+          lawyers:lawyer_id(
+            id,
+            user_id,
+            users:user_id(id, display_name, email)
+          )
+        `)
+        .eq('id', consultation_id)
+        .single();
+
+      if (error || !consultation) {
+        throw new NotFoundError('Consultation not found');
+      }
+
+      // Check authorization
+      const isUser = consultation.user_id === userId;
+      const isLawyer = consultation.lawyers?.user_id === userId;
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isUser && !isLawyer && !isAdmin) {
+        throw new ForbiddenError('You do not have access to this consultation');
+      }
+
+      if (consultation.consultation_type !== 'video') {
+        throw new ValidationError('This is not a video consultation');
+      }
+
+      if (consultation.status !== 'confirmed') {
+        throw new ValidationError('Consultation is not confirmed');
+      }
+
+      // Calculate timing
+      const now = new Date();
+      const consultationDateTime = new Date(`${consultation.booking_date}T${consultation.booking_time}:00`);
+      const minutesUntil = Math.round((consultationDateTime - now) / (1000 * 60));
+
+      res.json({
+        success: true,
+        meeting: {
+          consultation_id: consultation.id,
+          meeting_link: consultation.meeting_link,
+          meeting_provider: consultation.meeting_provider || 'jitsi',
+          room_name: consultation.meeting_room_name,
+          is_ready: !!consultation.meeting_link,
+          link_generated_at: consultation.meeting_link_generated_at,
+          booking_date: consultation.booking_date,
+          booking_time: consultation.booking_time,
+          minutes_until_start: minutesUntil,
+          can_join: minutesUntil <= 5 && minutesUntil >= -30,
+          other_participant: isUser ? {
+            name: consultation.lawyers?.users?.display_name,
+            role: 'lawyer'
+          } : {
+            name: consultation.users?.display_name,
+            role: 'client'
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /consultations/:consultation_id/generate-meeting-link
+   * Manually generate meeting link (for testing or immediate needs)
+   */
+  async generateMeetingLink(req, res, next) {
+    try {
+      const { consultation_id } = req.params;
+      const userId = req.user.id;
+
+      // Get consultation
+      const { data: consultation, error } = await supabaseAdmin
+        .from('consultations')
+        .select(`
+          *,
+          lawyers:lawyer_id(user_id)
+        `)
+        .eq('id', consultation_id)
+        .single();
+
+      if (error || !consultation) {
+        throw new NotFoundError('Consultation not found');
+      }
+
+      // Check authorization (only lawyer, user, or admin can generate)
+      const isUser = consultation.user_id === userId;
+      const isLawyer = consultation.lawyers?.user_id === userId;
+      const isAdmin = req.user.role === 'admin';
+
+      if (!isUser && !isLawyer && !isAdmin) {
+        throw new ForbiddenError('You cannot generate meeting link for this consultation');
+      }
+
+      if (consultation.consultation_type !== 'video') {
+        throw new ValidationError('This is not a video consultation');
+      }
+
+      if (consultation.status !== 'confirmed') {
+        throw new ValidationError('Consultation must be confirmed before generating meeting link');
+      }
+
+      // Generate meeting link
+      const result = await meetingScheduler.forceGenerateMeetingLink(consultation_id);
+
+      res.json({
+        success: true,
+        message: result.isNew ? 'Meeting link generated successfully' : 'Meeting link already exists',
+        meeting: {
+          meeting_link: result.consultation.meeting_link || result.meeting?.meeting_link,
+          provider: 'jitsi',
+          is_new: result.isNew
+        }
       });
     } catch (error) {
       next(error);

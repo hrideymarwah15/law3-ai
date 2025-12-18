@@ -17,6 +17,24 @@ const {
 // All routes require authentication
 router.use(supabaseAuthMiddleware);
 
+// Get upcoming video consultations (for dashboard)
+router.get(
+  '/upcoming-video',
+  asyncHandler(consultationController.getUpcomingVideoConsultations)
+);
+
+// Get meeting details for a consultation
+router.get(
+  '/:consultation_id/meeting',
+  asyncHandler(consultationController.getMeetingDetails)
+);
+
+// Manually generate meeting link
+router.post(
+  '/:consultation_id/generate-meeting-link',
+  asyncHandler(consultationController.generateMeetingLink)
+);
+
 router.post(
   '/book',
   validate(bookConsultationSchema),

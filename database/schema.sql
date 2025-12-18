@@ -66,7 +66,7 @@ CREATE TYPE user_role AS ENUM ('user', 'lawyer', 'admin', 'super_admin');
 CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended', 'deleted');
 CREATE TYPE verification_status AS ENUM ('pending', 'under_review', 'verified', 'rejected', 'revoked');
 CREATE TYPE consultation_status AS ENUM ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled');
-CREATE TYPE consultation_type AS ENUM ('video', 'audio', 'chat', 'in_person');
+CREATE TYPE consultation_type AS ENUM ('video', 'audio', 'in_person');
 CREATE TYPE payment_status AS ENUM ('initiated', 'pending', 'processing', 'success', 'failed', 'refunded', 'partially_refunded', 'disputed');
 CREATE TYPE case_status AS ENUM ('active', 'closed', 'pending', 'won', 'lost', 'settled', 'appealed', 'archived');
 CREATE TYPE case_type AS ENUM ('civil', 'criminal', 'family', 'property', 'consumer', 'labour', 'tax', 'constitutional', 'corporate', 'intellectual_property', 'cyber', 'other');

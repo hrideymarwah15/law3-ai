@@ -79,6 +79,12 @@ const consultationStatus = z.enum([
   'no_show',
 ]);
 
+const consultationType = z.enum([
+  'video',
+  'audio',
+  'in_person',
+]);
+
 const paymentStatus = z.enum([
   'initiated',
   'pending',
@@ -136,6 +142,7 @@ module.exports = {
   specialization,
   caseType,
   consultationStatus,
+  consultationType,
   paymentStatus,
   caseStatus,
   dayOfWeek,

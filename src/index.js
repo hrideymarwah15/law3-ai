@@ -232,6 +232,9 @@ const { gracefulShutdown, registerDefaultCleanups } = require('./utils/gracefulS
 const { initializeSocketServer } = require('./socket');
 const http = require('http');
 
+// Import meeting scheduler
+const meetingScheduler = require('./services/meeting-scheduler.service');
+
 // Register default cleanup handlers
 registerDefaultCleanups();
 
@@ -255,6 +258,10 @@ const startServer = async () => {
     app.set('io', io);
     logger.info('Socket.io server initialized');
 
+    // Start meeting scheduler for automatic meeting link generation
+    meetingScheduler.start(io);
+    logger.info('Meeting scheduler started - will generate links 2 min before consultations');
+
     // Start HTTP server
     server.listen(PORT, () => {
       logger.info(`🚀 Nyaay Saathi API server running on port ${PORT}`);
@@ -273,6 +280,12 @@ const startServer = async () => {
     gracefulShutdown.init(server, {
       timeout: parseInt(process.env.SHUTDOWN_TIMEOUT, 10) || 30000,
     });
+
+    // Stop meeting scheduler on shutdown
+    gracefulShutdown.registerCleanup('meetingScheduler', async () => {
+      logger.info('Stopping meeting scheduler...');
+      meetingScheduler.stop();
+    }, 15);
 
     // Add shutdown middleware (reject requests during shutdown)
     app.use(gracefulShutdown.middleware());

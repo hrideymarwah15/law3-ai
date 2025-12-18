@@ -247,7 +247,7 @@ async function seed() {
       scheduled_start: new Date(futureDate2.setHours(10, 30, 0, 0)).toISOString(),
       scheduled_end: new Date(futureDate2.setHours(11, 0, 0, 0)).toISOString(),
       status: 'confirmed',
-      consultation_type: 'chat',
+      consultation_type: 'in_person',
       amount: 1800,
       payment_status: 'success',
       meeting_link: 'https://meet.nyaaysaathi.com/consult-5555',

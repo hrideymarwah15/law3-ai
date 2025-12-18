@@ -160,40 +160,39 @@ class ChatRepository {
    * Create a new message
    */
   async createMessage({
-    roomId,
-    senderId,
-    senderType,
-    messageType = 'text',
+    room_id,
+    sender_id,
+    sender_type,
+    message_type = 'text',
     content,
-    fileUrl = null,
-    fileName = null,
-    fileSize = null,
-    fileMimeType = null,
-    thumbnailUrl = null,
-    replyToId = null,
+    file_url = null,
+    file_name = null,
+    file_size = null,
+    file_mime_type = null,
+    thumbnail_url = null,
+    reply_to_id = null,
     metadata = {},
   }) {
     const { data, error } = await supabaseAdmin
       .from('chat_messages')
       .insert({
-        room_id: roomId,
-        sender_id: senderId,
-        sender_type: senderType,
-        message_type: messageType,
+        room_id,
+        sender_id,
+        sender_type,
+        message_type,
         content,
-        file_url: fileUrl,
-        file_name: fileName,
-        file_size: fileSize,
-        file_mime_type: fileMimeType,
-        thumbnail_url: thumbnailUrl,
-        reply_to_id: replyToId,
+        file_url,
+        file_name,
+        file_size,
+        file_mime_type,
+        thumbnail_url,
+        reply_to_id,
         metadata,
         status: 'sent',
       })
       .select(`
         *,
-        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url),
-        reply_to:chat_messages!chat_messages_reply_to_id_fkey(id, content, sender_id, message_type)
+        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url)
       `)
       .single();
 
@@ -212,8 +211,7 @@ class ChatRepository {
       .from('chat_messages')
       .select(`
         *,
-        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url),
-        reply_to:chat_messages!chat_messages_reply_to_id_fkey(id, content, sender_id, message_type, sender:users!chat_messages_sender_id_fkey(first_name, last_name))
+        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url)
       `)
       .eq('room_id', roomId)
       .eq('is_deleted', false)
@@ -258,8 +256,7 @@ class ChatRepository {
       .from('chat_messages')
       .select(`
         *,
-        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url),
-        reply_to:chat_messages!chat_messages_reply_to_id_fkey(id, content, sender_id, message_type)
+        sender:users!chat_messages_sender_id_fkey(id, first_name, last_name, display_name, avatar_url)
       `)
       .eq('id', messageId)
       .single();
