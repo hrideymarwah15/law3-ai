@@ -7,6 +7,7 @@
 
 const BaseRepository = require('./base.repository');
 const { NotFoundError } = require('../middleware/errorHandler');
+const { incrementCounter } = require('../utils/database');
 
 class LawyerRepository extends BaseRepository {
   constructor() {
@@ -232,11 +233,7 @@ class LawyerRepository extends BaseRepository {
    * @param {string} id - Lawyer ID
    */
   async incrementConsultationCount(id) {
-    await this.db.rpc('increment', {
-      table_name: 'lawyers',
-      column_name: 'total_consultations',
-      row_id: id,
-    });
+    await incrementCounter('lawyers', 'total_consultations', id);
   }
 
   /**

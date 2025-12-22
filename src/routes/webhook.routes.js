@@ -78,11 +78,23 @@ async function handlePaymentCaptured(payment) {
 
   logger.info({ message: 'Payment captured', orderId: order_id, paymentId: payment_id });
 
-  // Find consultation by order_id
+  // First find the payment record by order_id to get consultation_id
+  const { data: paymentRecord, error: paymentError } = await supabaseAdmin
+    .from('payments')
+    .select('consultation_id')
+    .eq('razorpay_order_id', order_id)
+    .single();
+
+  if (paymentError || !paymentRecord) {
+    logger.error({ message: 'Payment record not found for order', orderId: order_id });
+    return;
+  }
+
+  // Now find consultation
   const { data: consultation, error } = await supabaseAdmin
     .from('consultations')
     .select('id, user_id, lawyer_id, booking_date, booking_time')
-    .eq('razorpay_order_id', order_id)
+    .eq('id', paymentRecord.consultation_id)
     .single();
 
   if (error || !consultation) {
@@ -90,16 +102,28 @@ async function handlePaymentCaptured(payment) {
     return;
   }
 
-  // Update consultation
-  await supabaseAdmin
-    .from('consultations')
-    .update({
-      payment_status: 'captured',
-      razorpay_payment_id: payment_id,
-      status: 'confirmed',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', consultation.id);
+    // Update payment record first
+    await supabaseAdmin
+      .from('payments')
+      .update({
+        razorpay_payment_id: payment_id,
+        status: 'success',
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('razorpay_order_id', order_id);
+
+    // Update consultation
+    await supabaseAdmin
+      .from('consultations')
+      .update({
+        payment_status: 'captured',
+        is_paid: true,
+        paid_at: new Date().toISOString(),
+        status: 'confirmed',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', consultation.id);
 
   // Get user details for notification
   const { data: user } = await supabaseAdmin
@@ -159,26 +183,45 @@ async function handlePaymentFailed(payment) {
     errorDescription: error_description,
   });
 
-  // Update consultation status
-  const { data: consultation } = await supabaseAdmin
-    .from('consultations')
-    .select('id, user_id, lawyer_id')
+  // Find payment record first to get consultation_id
+  const { data: paymentRecord } = await supabaseAdmin
+    .from('payments')
+    .select('consultation_id')
     .eq('razorpay_order_id', order_id)
     .single();
 
-  if (consultation) {
+  if (paymentRecord) {
+    // Update payment record
     await supabaseAdmin
-      .from('consultations')
+      .from('payments')
       .update({
-        payment_status: 'failed',
-        payment_error: error_description,
+        status: 'failed',
+        error_message: error_description,
+        razorpay_payment_id: payment_id,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', consultation.id);
+      .eq('razorpay_order_id', order_id);
 
-    // Clear cache
-    await cache.del(`consultations:user:${consultation.user_id}`);
-    await cache.del(`consultations:lawyer:${consultation.lawyer_id}`);
+    // Get consultation for cache clearing
+    const { data: consultation } = await supabaseAdmin
+      .from('consultations')
+      .select('id, user_id, lawyer_id')
+      .eq('id', paymentRecord.consultation_id)
+      .single();
+
+    if (consultation) {
+      await supabaseAdmin
+        .from('consultations')
+        .update({
+          payment_status: 'failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', consultation.id);
+
+      // Clear cache
+      await cache.del(`consultations:user:${consultation.user_id}`);
+      await cache.del(`consultations:lawyer:${consultation.lawyer_id}`);
+    }
   }
 }
 
@@ -190,23 +233,33 @@ async function handleRefundCreated(refund) {
 
   logger.info({ message: 'Refund created', paymentId: payment_id, refundId: refund_id });
 
-  // Find consultation by payment_id
-  const { data: consultation } = await supabaseAdmin
-    .from('consultations')
-    .select('id, user_id')
+  // Find payment record by razorpay_payment_id to get consultation_id
+  const { data: paymentRecord } = await supabaseAdmin
+    .from('payments')
+    .select('consultation_id')
     .eq('razorpay_payment_id', payment_id)
     .single();
 
-  if (consultation) {
+  if (paymentRecord) {
+    // Update payment record with refund info
     await supabaseAdmin
-      .from('consultations')
+      .from('payments')
       .update({
-        refund_status: 'initiated',
         refund_id: refund_id,
+        refund_status: 'initiated',
         refund_amount: amount / 100, // Convert paise to rupees
         updated_at: new Date().toISOString(),
       })
-      .eq('id', consultation.id);
+      .eq('razorpay_payment_id', payment_id);
+
+    // Update consultation status
+    await supabaseAdmin
+      .from('consultations')
+      .update({
+        payment_status: 'refund_initiated',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', paymentRecord.consultation_id);
   }
 }
 
@@ -218,43 +271,63 @@ async function handleRefundProcessed(refund) {
 
   logger.info({ message: 'Refund processed', paymentId: payment_id, refundId: refund_id });
 
-  // Find consultation by payment_id
-  const { data: consultation } = await supabaseAdmin
-    .from('consultations')
-    .select('id, user_id')
+  // Find payment record to get consultation_id
+  const { data: paymentRecord } = await supabaseAdmin
+    .from('payments')
+    .select('consultation_id')
     .eq('razorpay_payment_id', payment_id)
     .single();
 
-  if (consultation) {
+  if (paymentRecord) {
+    // Update payment record
     await supabaseAdmin
-      .from('consultations')
+      .from('payments')
       .update({
         refund_status: 'completed',
+        refunded_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', consultation.id);
+      .eq('razorpay_payment_id', payment_id);
 
-    // Get user for notification
-    const { data: user } = await supabaseAdmin
-      .from('users')
-      .select('phone, display_name')
-      .eq('id', consultation.user_id)
+    // Get consultation for user notification
+    const { data: consultation } = await supabaseAdmin
+      .from('consultations')
+      .select('id, user_id')
+      .eq('id', paymentRecord.consultation_id)
       .single();
 
-    // Send refund notification SMS
-    if (user?.phone) {
-      try {
-        await smsService.sendSMS(
-          user.phone,
-          `Hi ${user.display_name}, your refund of ₹${amount / 100} has been processed. It will reflect in your account within 5-7 business days. - Nyaay Saathi`
-        );
-      } catch (smsError) {
-        logger.error({ message: 'Failed to send refund SMS', error: smsError.message });
-      }
-    }
+    if (consultation) {
+      // Update consultation status
+      await supabaseAdmin
+        .from('consultations')
+        .update({
+          payment_status: 'refunded',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', consultation.id);
 
-    // Clear cache
-    await cache.del(`consultations:user:${consultation.user_id}`);
+      // Get user for notification
+      const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('phone, display_name')
+        .eq('id', consultation.user_id)
+        .single();
+
+      // Send refund notification SMS
+      if (user?.phone) {
+        try {
+          await smsService.sendSMS(
+            user.phone,
+            `Hi ${user.display_name || 'there'}, your refund of ₹${amount / 100} has been processed. It will reflect in your account within 5-7 business days. - Nyaay Saathi`
+          );
+        } catch (smsError) {
+          logger.error({ message: 'Failed to send refund SMS', error: smsError.message });
+        }
+      }
+
+      // Clear cache
+      await cache.del(`consultations:user:${consultation.user_id}`);
+    }
   }
 }
 

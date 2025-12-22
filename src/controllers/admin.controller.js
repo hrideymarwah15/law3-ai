@@ -3,6 +3,7 @@ const { NotFoundError, ValidationError, ForbiddenError } = require('../middlewar
 const { cache, redisClient } = require('../config/redis');
 const logger = require('../config/logger');
 const { auditService, AuditActions } = require('../services/audit.service');
+const { incrementCounter } = require('../utils/database');
 const paymentService = require('../services/payment.service');
 const smsService = require('../services/sms.service');
 
@@ -1155,12 +1156,8 @@ class AdminController {
       issued_by: issuedBy,
     });
 
-    // Increment warning count
-    await supabaseAdmin.rpc('increment', {
-      table_name: 'users',
-      column_name: 'warning_count',
-      row_id: userId,
-    });
+    // Increment warning count using database utility
+    await incrementCounter('users', 'warning_count', userId);
   }
 
   // ============================================

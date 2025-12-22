@@ -203,23 +203,23 @@ class ChatService {
       }
     }
 
-    // Create message
+    // Create message with snake_case parameters for repository
     const messageData = {
-      roomId,
-      senderId: userId,
-      senderType,
-      messageType,
+      room_id: roomId,
+      sender_id: userId,
+      sender_type: senderType,
+      message_type: messageType,
       content: content?.trim(),
-      replyToId,
+      reply_to_id: replyToId,
     };
 
     // Handle file attachment
     if (fileData && messageType !== 'text') {
-      messageData.fileUrl = fileData.url;
-      messageData.fileName = fileData.name;
-      messageData.fileSize = fileData.size;
-      messageData.fileMimeType = fileData.mimeType;
-      messageData.thumbnailUrl = fileData.thumbnailUrl;
+      messageData.file_url = fileData.url;
+      messageData.file_name = fileData.name;
+      messageData.file_size = fileData.size;
+      messageData.file_mime_type = fileData.mimeType;
+      messageData.thumbnail_url = fileData.thumbnailUrl;
     }
 
     const { data: message, error } = await chatRepository.createMessage(messageData);

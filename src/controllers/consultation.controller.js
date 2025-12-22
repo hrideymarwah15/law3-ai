@@ -1,5 +1,7 @@
+const crypto = require('crypto');
 const { supabaseAdmin } = require('../config/supabase');
 const { cache } = require('../config/redis');
+const { incrementCounter } = require('../utils/database');
 const paymentService = require('../services/payment.service');
 const videoService = require('../services/video.service');
 const smsService = require('../services/sms.service');
@@ -191,31 +193,31 @@ class ConsultationController {
         })
         .eq('consultation_id', consultation_id);
 
-      // Update lawyer's consultation count
-      await supabaseAdmin.rpc('increment', {
-        table_name: 'lawyers',
-        column_name: 'total_consultations',
-        row_id: consultation.lawyer_id,
-      });
+      // Update lawyer's consultation count using database utility
+      await incrementCounter('lawyers', 'total_consultations', consultation.lawyer_id);
 
-      // Send SMS confirmation
-      try {
-        await smsService.sendBookingConfirmation(
-          req.user.phone,
-          consultation.lawyers.users.display_name,
-          consultation.booking_date,
-          consultation.booking_time,
-          consultation.amount
-        );
+      // Send SMS confirmation (only if user has phone)
+      if (req.user.phone) {
+        try {
+          await smsService.sendBookingConfirmation(
+            req.user.phone,
+            consultation.lawyers.users.display_name,
+            consultation.booking_date,
+            consultation.booking_time,
+            consultation.amount
+          );
 
-        // Send payment receipt SMS
-        await smsService.sendPaymentReceipt(
-          req.user.phone,
-          consultation.amount,
-          consultation_id
-        );
-      } catch (smsError) {
-        logger.error({ message: 'SMS notification failed', error: smsError.message });
+          // Send payment receipt SMS
+          await smsService.sendPaymentReceipt(
+            req.user.phone,
+            consultation.amount,
+            consultation_id
+          );
+        } catch (smsError) {
+          logger.error({ message: 'SMS notification failed', error: smsError.message });
+        }
+      } else {
+        logger.debug({ message: 'SMS skipped - user has no phone number', userId: req.user.id });
       }
 
       logger.info({ 
@@ -390,16 +392,18 @@ class ConsultationController {
         }
       }
 
-      // Send cancellation SMS
-      try {
-        await smsService.sendCancellationNotice(
-          req.user.phone,
-          'Lawyer',
-          consultation.booking_date,
-          refundStatus
-        );
-      } catch (smsError) {
-        logger.error({ message: 'Cancellation SMS failed', error: smsError.message });
+      // Send cancellation SMS (only if user has phone)
+      if (req.user.phone) {
+        try {
+          await smsService.sendCancellationNotice(
+            req.user.phone,
+            'Lawyer',
+            consultation.booking_date,
+            refundStatus
+          );
+        } catch (smsError) {
+          logger.error({ message: 'Cancellation SMS failed', error: smsError.message });
+        }
       }
 
       logger.info({ 

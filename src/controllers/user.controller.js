@@ -141,8 +141,15 @@ class UserController {
       );
     }
 
-    // Verify current password by re-authenticating
-    const { error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+    // Verify current password by re-authenticating using the public supabase client
+    const { supabase } = require('../config/supabase');
+    
+    // Need email to verify password
+    if (!req.user.email) {
+      throw new ValidationError('Password change requires an email-based account');
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: req.user.email,
       password: current_password,
     });
@@ -155,7 +162,7 @@ class UserController {
       throw new ValidationError('Current password is incorrect');
     }
 
-    // Update password
+    // Update password using admin API
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       userId,
       { password: new_password }
