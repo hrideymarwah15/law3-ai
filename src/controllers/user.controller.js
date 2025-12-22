@@ -12,6 +12,7 @@ const { ValidationError, UnauthorizedError } = require('../middleware/errorHandl
 const { asyncHandler } = require('../utils/asyncHandler');
 const { services } = require('../services');
 const logger = require('../config/logger');
+const { convertUserExportToCSV } = require('../utils/csv.utils');
 
 class UserController {
   constructor() {
@@ -395,22 +396,34 @@ class UserController {
       includes: include,
     });
 
-    // For CSV format, we'd need to flatten the data
-    // For now, return JSON
+    // Handle CSV format export
     if (format === 'csv') {
-      // TODO: Implement CSV conversion
-      res.success({
-        message: 'Data export generated. CSV format coming soon.',
-        data: exportData,
-        format: 'json', // Fallback to JSON for now
+      const csvResult = convertUserExportToCSV(exportData);
+      
+      // Set proper headers for CSV download
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `nyaay-saathi-export-${timestamp}.csv`;
+      
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-Export-Files-Count', csvResult.files.length);
+      
+      logger.info({
+        message: 'CSV export generated',
+        userId,
+        filesCount: csvResult.files.length,
+        totalSize: csvResult.combined.length,
       });
-    } else {
-      res.success({
-        message: 'Data export generated successfully',
-        data: exportData,
-        format: 'json',
-      });
+      
+      return res.send(csvResult.combined);
     }
+    
+    // JSON format export
+    res.success({
+      message: 'Data export generated successfully',
+      data: exportData,
+      format: 'json',
+    });
   });
 
   /**

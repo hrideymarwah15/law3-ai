@@ -12,6 +12,7 @@
 
 const BaseService = require('./base.service');
 const { NotFoundError, ConflictError, ValidationError } = require('../middleware/errorHandler');
+const notificationService = require('./notification.service');
 
 class LawyerService extends BaseService {
   /**
@@ -200,7 +201,23 @@ class LawyerService extends BaseService {
         timestamp: new Date().toISOString(),
       });
 
-      // TODO: Send notification to lawyer about verification
+      // Send notification to lawyer about verification approval
+      await notificationService.create({
+        userId: lawyer.user_id,
+        title: '🎉 Verification Approved!',
+        body: 'Congratulations! Your lawyer profile has been verified. You can now receive consultation requests from clients.',
+        type: 'verification',
+        category: 'account',
+        priority: 'high',
+        entityType: 'lawyer',
+        entityId: lawyerId,
+        actionUrl: '/lawyer/dashboard',
+        channels: ['push', 'email', 'sms'],
+        metadata: {
+          verification_status: 'verified',
+          verified_at: new Date().toISOString(),
+        },
+      });
       
       return updated;
     });
@@ -234,7 +251,24 @@ class LawyerService extends BaseService {
         timestamp: new Date().toISOString(),
       });
 
-      // TODO: Send notification to lawyer about rejection
+      // Send notification to lawyer about rejection
+      await notificationService.create({
+        userId: lawyer.user_id,
+        title: 'Verification Update Required',
+        body: `Your lawyer verification could not be approved. Reason: ${reason}. Please update your profile and resubmit for verification.`,
+        type: 'verification',
+        category: 'account',
+        priority: 'high',
+        entityType: 'lawyer',
+        entityId: lawyerId,
+        actionUrl: '/lawyer/profile/edit',
+        channels: ['push', 'email', 'sms'],
+        metadata: {
+          verification_status: 'rejected',
+          rejection_reason: reason,
+          rejected_at: new Date().toISOString(),
+        },
+      });
       
       return updated;
     });

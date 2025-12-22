@@ -2,27 +2,100 @@ const rateLimit = require('express-rate-limit');
 const { cache } = require('../config/redis');
 const logger = require('../config/logger');
 
-// Custom rate limit store using Redis
+/**
+ * Custom Redis-based rate limit store
+ * Provides distributed rate limiting across multiple server instances
+ */
 class RedisStore {
   constructor(windowMs) {
     this.windowMs = windowMs;
+    this.prefix = 'ratelimit:';
   }
 
+  /**
+   * Increment the hit counter for a key
+   * @param {string} key - The rate limit key
+   * @returns {Promise<{totalHits: number, resetTime: Date}>}
+   */
   async increment(key) {
     const ttlSeconds = Math.ceil(this.windowMs / 1000);
-    const count = await cache.incr(`ratelimit:${key}`, ttlSeconds);
-    return {
-      totalHits: count,
-      resetTime: new Date(Date.now() + this.windowMs),
-    };
+    const fullKey = `${this.prefix}${key}`;
+    
+    try {
+      const count = await cache.incr(fullKey, ttlSeconds);
+      return {
+        totalHits: count,
+        resetTime: new Date(Date.now() + this.windowMs),
+      };
+    } catch (error) {
+      logger.error({ 
+        message: 'Rate limit increment failed', 
+        error: error.message, 
+        key 
+      });
+      // Fail open - allow request if Redis is down
+      return {
+        totalHits: 0,
+        resetTime: new Date(Date.now() + this.windowMs),
+      };
+    }
   }
 
+  /**
+   * Decrement the hit counter for a key
+   * Used when a request should not count against the limit (e.g., successful response)
+   * @param {string} key - The rate limit key
+   */
   async decrement(key) {
-    // Not implemented for simplicity
+    const fullKey = `${this.prefix}${key}`;
+    
+    try {
+      const current = await cache.get(fullKey);
+      if (current && parseInt(current) > 0) {
+        await cache.decr(fullKey);
+      }
+    } catch (error) {
+      logger.error({ 
+        message: 'Rate limit decrement failed', 
+        error: error.message, 
+        key 
+      });
+      // Fail silently - decrement failure is not critical
+    }
   }
 
+  /**
+   * Reset the hit counter for a key
+   * @param {string} key - The rate limit key
+   */
   async resetKey(key) {
-    await cache.del(`ratelimit:${key}`);
+    const fullKey = `${this.prefix}${key}`;
+    
+    try {
+      await cache.del(fullKey);
+    } catch (error) {
+      logger.error({ 
+        message: 'Rate limit reset failed', 
+        error: error.message, 
+        key 
+      });
+    }
+  }
+
+  /**
+   * Get current hit count for a key (for monitoring)
+   * @param {string} key - The rate limit key
+   * @returns {Promise<number>}
+   */
+  async getHits(key) {
+    const fullKey = `${this.prefix}${key}`;
+    
+    try {
+      const hits = await cache.get(fullKey);
+      return hits ? parseInt(hits) : 0;
+    } catch (error) {
+      return 0;
+    }
   }
 }
 

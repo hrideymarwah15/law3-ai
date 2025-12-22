@@ -17,6 +17,7 @@ const {
   ValidationError, 
   ForbiddenError,
 } = require('../middleware/errorHandler');
+const notificationService = require('./notification.service');
 
 /**
  * Valid consultation status transitions
@@ -119,7 +120,47 @@ class ConsultationService extends BaseService {
         scheduledAt: scheduled_at,
       });
 
-      // TODO: Send notifications to both user and lawyer
+      // Send notification to user about booking confirmation
+      await notificationService.create({
+        userId: user_id,
+        title: 'Consultation Booked',
+        body: `Your consultation with ${lawyer.users?.display_name || 'the lawyer'} has been booked for ${bookingDate} at ${bookingTime}. Awaiting confirmation.`,
+        type: 'consultation',
+        category: 'consultation',
+        priority: 'normal',
+        entityType: 'consultation',
+        entityId: consultation.id,
+        actionUrl: `/consultations/${consultation.id}`,
+        channels: ['push', 'email'],
+        metadata: {
+          consultation_id: consultation.id,
+          lawyer_id,
+          booking_date: bookingDate,
+          booking_time: bookingTime,
+          status: 'pending',
+        },
+      });
+
+      // Send notification to lawyer about new booking request
+      await notificationService.create({
+        userId: lawyer.user_id,
+        title: 'New Consultation Request',
+        body: `You have a new consultation request for ${bookingDate} at ${bookingTime}. Please confirm or decline.`,
+        type: 'consultation',
+        category: 'consultation',
+        priority: 'high',
+        entityType: 'consultation',
+        entityId: consultation.id,
+        actionUrl: `/lawyer/consultations/${consultation.id}`,
+        channels: ['push', 'email', 'sms'],
+        metadata: {
+          consultation_id: consultation.id,
+          user_id,
+          booking_date: bookingDate,
+          booking_time: bookingTime,
+          status: 'pending',
+        },
+      });
 
       return consultation;
     });
