@@ -1,0 +1,2543 @@
+{
+  "info": {
+    "_postman_id": "nyaay-saathi-api-collection",
+    "name": "Nyaay Saathi API",
+    "description": "Complete API collection for Nyaay Saathi Legal Platform\n\n## Authentication\nMost endpoints require Bearer token authentication. After login, the token is automatically saved to the `access_token` variable.\n\n## Environment Variables Required\n- `base_url`: API base URL (default: http://localhost:3000)\n- `access_token`: JWT token (auto-populated after login)\n- `refresh_token`: Refresh token (auto-populated after login)\n- `razorpay_key_id`: Razorpay key for payments\n\n## Quick Start\n1. Import this collection\n2. Import the environment file\n3. Run 'Signup' or 'Signin' to get tokens\n4. All authenticated requests will work automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "pm.request.headers.add({",
+          "    key: 'X-Request-ID',",
+          "    value: pm.variables.replaceIn('{{$guid}}')",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 Health",
+      "description": "Health check endpoints for monitoring",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Basic health check - returns service status"
+          }
+        },
+        {
+          "name": "Detailed Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/detailed",
+              "host": ["{{base_url}}"],
+              "path": ["health", "detailed"]
+            },
+            "description": "Detailed health with DB and Redis status"
+          }
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": ["{{base_url}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Kubernetes readiness probe"
+          }
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": ["{{base_url}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Kubernetes liveness probe"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 Auth",
+      "description": "Authentication endpoints - signup, signin, OTP, OAuth",
+      "item": [
+        {
+          "name": "Signup (Email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.user) {",
+                  "        pm.collectionVariables.set('user_id', response.user.id);",
+                  "    }",
+                  "    pm.test('Signup successful', () => {",
+                  "        pm.expect(response.success).to.be.true;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test@123456\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"signup_method\": \"email\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signup"]
+            },
+            "description": "Register a new user with email and password"
+          }
+        },
+        {
+          "name": "Signup (Phone)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"password\": \"Test@123456\",\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"signup_method\": \"phone\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signup"]
+            },
+            "description": "Register a new user with phone number"
+          }
+        },
+        {
+          "name": "Signin (Email/Password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.session) {",
+                  "        pm.collectionVariables.set('access_token', response.session.access_token);",
+                  "        pm.collectionVariables.set('refresh_token', response.session.refresh_token);",
+                  "    }",
+                  "    if (response.user) {",
+                  "        pm.collectionVariables.set('user_id', response.user.id);",
+                  "        pm.collectionVariables.set('user_role', response.user.role);",
+                  "    }",
+                  "    pm.test('Login successful', () => {",
+                  "        pm.expect(response.success).to.be.true;",
+                  "        pm.expect(response.session.access_token).to.exist;",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Test@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signin"]
+            },
+            "description": "Login with email and password. Tokens are auto-saved."
+          }
+        },
+        {
+          "name": "Signin (Phone/Password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.session) {",
+                  "        pm.collectionVariables.set('access_token', response.session.access_token);",
+                  "        pm.collectionVariables.set('refresh_token', response.session.refresh_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"password\": \"Test@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signin",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signin"]
+            },
+            "description": "Login with phone and password"
+          }
+        },
+        {
+          "name": "Request OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signin/otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signin", "otp"]
+            },
+            "description": "Request OTP for passwordless login"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.session) {",
+                  "        pm.collectionVariables.set('access_token', response.session.access_token);",
+                  "        pm.collectionVariables.set('refresh_token', response.session.refresh_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"token\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "verify-otp"]
+            },
+            "description": "Verify OTP and get access tokens"
+          }
+        },
+        {
+          "name": "Google OAuth",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"google\",\n  \"redirect_url\": \"http://localhost:3001/auth/callback\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signin/oauth",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signin", "oauth"]
+            },
+            "description": "Initiate Google OAuth flow - returns redirect URL"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "me"]
+            },
+            "description": "Get current authenticated user details"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.session) {",
+                  "        pm.collectionVariables.set('access_token', response.session.access_token);",
+                  "        pm.collectionVariables.set('refresh_token', response.session.refresh_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "refresh"]
+            },
+            "description": "Refresh access token using refresh token"
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "forgot-password"]
+            },
+            "description": "Request password reset email"
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_password\": \"NewPassword@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "reset-password"]
+            },
+            "description": "Reset password (requires valid session from reset link)"
+          }
+        },
+        {
+          "name": "Complete Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"preferred_language\": \"english\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/complete-profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "complete-profile"]
+            },
+            "description": "Complete user profile after signup"
+          }
+        },
+        {
+          "name": "Signout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/auth/signout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "auth", "signout"]
+            },
+            "description": "Sign out current user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User",
+      "description": "User profile and account management",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "profile"]
+            },
+            "description": "Get current user's profile"
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"city\": \"Delhi\",\n  \"language_preference\": \"hindi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "profile"]
+            },
+            "description": "Update user profile"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"OldPassword@123\",\n  \"new_password\": \"NewPassword@456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "change-password"]
+            },
+            "description": "Change user password"
+          }
+        },
+        {
+          "name": "Get Notification Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/notifications/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "notifications", "preferences"]
+            },
+            "description": "Get notification preferences"
+          }
+        },
+        {
+          "name": "Update Notification Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_notifications\": true,\n  \"sms_notifications\": true,\n  \"push_notifications\": false,\n  \"marketing_emails\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/notifications/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "notifications", "preferences"]
+            },
+            "description": "Update notification preferences"
+          }
+        },
+        {
+          "name": "Request Data Export (GDPR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/data-export",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "data-export"]
+            },
+            "description": "Request data export (GDPR compliance)"
+          }
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"CurrentPassword@123\",\n  \"reason\": \"No longer need the service\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/user/account",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "user", "account"]
+            },
+            "description": "Delete (soft delete) user account"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚖️ Lawyers",
+      "description": "Lawyer search, profiles, and registration",
+      "item": [
+        {
+          "name": "Search Lawyers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.lawyers && response.lawyers.length > 0) {",
+                  "        pm.collectionVariables.set('lawyer_id', response.lawyers[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/search?specialization=family&city=Mumbai&min_rating=4&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "search"],
+              "query": [
+                { "key": "specialization", "value": "family", "description": "Filter by specialization" },
+                { "key": "city", "value": "Mumbai", "description": "Filter by city" },
+                { "key": "min_rating", "value": "4", "description": "Minimum rating" },
+                { "key": "max_fee", "value": "", "disabled": true, "description": "Maximum consultation fee" },
+                { "key": "language", "value": "", "disabled": true, "description": "Language preference" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Search lawyers with filters"
+          }
+        },
+        {
+          "name": "Get Lawyer Profile",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/{{lawyer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "{{lawyer_id}}"]
+            },
+            "description": "Get detailed lawyer profile"
+          }
+        },
+        {
+          "name": "Get Lawyer Availability",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/{{lawyer_id}}/availability?date=2025-01-15",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "{{lawyer_id}}", "availability"],
+              "query": [
+                { "key": "date", "value": "2025-01-15", "description": "Date to check (YYYY-MM-DD)" }
+              ]
+            },
+            "description": "Get available time slots for a lawyer"
+          }
+        },
+        {
+          "name": "Submit Lawyer Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bar_council_id\": \"MH/1234/2020\",\n  \"bar_council_state\": \"Maharashtra\",\n  \"specializations\": [\"family\", \"civil\"],\n  \"experience_years\": 5,\n  \"consultation_fee\": 1500,\n  \"bio\": \"Experienced family lawyer with expertise in divorce and custody cases.\",\n  \"education\": [\n    {\n      \"degree\": \"LLB\",\n      \"institution\": \"Mumbai University\",\n      \"year\": 2019\n    }\n  ],\n  \"languages\": [\"english\", \"hindi\", \"marathi\"],\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "register"]
+            },
+            "description": "Submit lawyer registration request"
+          }
+        },
+        {
+          "name": "Get Registration Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/registration-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "registration-status"]
+            },
+            "description": "Get current registration request status"
+          }
+        },
+        {
+          "name": "Update Registration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"Updated bio with more details...\",\n  \"consultation_fee\": 2000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/registration",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "registration"]
+            },
+            "description": "Update registration request (after changes requested)"
+          }
+        },
+        {
+          "name": "Withdraw Registration",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/registration",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "registration"]
+            },
+            "description": "Withdraw registration request"
+          }
+        },
+        {
+          "name": "[Lawyer] Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me"]
+            },
+            "description": "Get own lawyer profile (verified lawyers only)"
+          }
+        },
+        {
+          "name": "[Lawyer] Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bio\": \"Updated professional bio\",\n  \"consultation_fee\": 2000,\n  \"is_available\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me"]
+            },
+            "description": "Update own lawyer profile"
+          }
+        },
+        {
+          "name": "[Lawyer] Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me", "dashboard"]
+            },
+            "description": "Get lawyer dashboard with stats"
+          }
+        },
+        {
+          "name": "[Lawyer] Get My Consultations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me/consultations?status=confirmed&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me", "consultations"],
+              "query": [
+                { "key": "status", "value": "confirmed" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Get lawyer's consultations"
+          }
+        },
+        {
+          "name": "[Lawyer] Set Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"day_of_week\": \"monday\",\n  \"slots\": [\n    { \"start_time\": \"09:00\", \"end_time\": \"12:00\" },\n    { \"start_time\": \"14:00\", \"end_time\": \"18:00\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/availability",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "availability"]
+            },
+            "description": "Set availability for a day"
+          }
+        },
+        {
+          "name": "[Lawyer] Set Bulk Availability",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availability\": [\n    {\n      \"day_of_week\": \"monday\",\n      \"slots\": [\n        { \"start_time\": \"09:00\", \"end_time\": \"17:00\" }\n      ]\n    },\n    {\n      \"day_of_week\": \"tuesday\",\n      \"slots\": [\n        { \"start_time\": \"10:00\", \"end_time\": \"18:00\" }\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me/availability/bulk",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me", "availability", "bulk"]
+            },
+            "description": "Set availability for multiple days"
+          }
+        },
+        {
+          "name": "[Lawyer] Set Unavailability",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unavailable_date\": \"2025-01-20\",\n  \"reason\": \"Personal leave\",\n  \"all_day\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/lawyers/me/unavailability",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "lawyers", "me", "unavailability"]
+            },
+            "description": "Set unavailability dates (vacation, holidays)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📅 Consultations",
+      "description": "Booking, payment, and consultation management",
+      "item": [
+        {
+          "name": "Book Consultation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.consultation) {",
+                  "        pm.collectionVariables.set('consultation_id', response.consultation.id);",
+                  "    }",
+                  "    if (response.razorpay) {",
+                  "        pm.collectionVariables.set('razorpay_order_id', response.razorpay.order_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lawyer_id\": \"{{lawyer_id}}\",\n  \"booking_date\": \"2025-01-20\",\n  \"booking_time\": \"10:00\",\n  \"problem_description\": \"I need legal advice regarding property dispute with my neighbor.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/book",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "book"]
+            },
+            "description": "Book a consultation - returns Razorpay order for payment"
+          }
+        },
+        {
+          "name": "Confirm Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_payment_id\": \"pay_xxxxxxxxxxxxx\",\n  \"razorpay_order_id\": \"{{razorpay_order_id}}\",\n  \"razorpay_signature\": \"signature_from_razorpay_callback\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/confirm-payment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "confirm-payment"]
+            },
+            "description": "Confirm payment after Razorpay callback"
+          }
+        },
+        {
+          "name": "Get My Consultations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/my-consultations?status=confirmed&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "my-consultations"],
+              "query": [
+                { "key": "status", "value": "confirmed", "description": "Filter: pending, confirmed, completed, cancelled" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Get user's consultations with filters"
+          }
+        },
+        {
+          "name": "Get Consultation Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}"]
+            },
+            "description": "Get full consultation details"
+          }
+        },
+        {
+          "name": "Get Upcoming Video Consultations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/upcoming-video?hours=24",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "upcoming-video"],
+              "query": [
+                { "key": "hours", "value": "24", "description": "Hours ahead to look" }
+              ]
+            },
+            "description": "Get upcoming video consultations for dashboard"
+          }
+        },
+        {
+          "name": "Get Meeting Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/meeting",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "meeting"]
+            },
+            "description": "Get video meeting link and details"
+          }
+        },
+        {
+          "name": "Generate Meeting Link",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/generate-meeting-link",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "generate-meeting-link"]
+            },
+            "description": "Manually generate Jitsi meeting link"
+          }
+        },
+        {
+          "name": "Reschedule Consultation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_date\": \"2025-01-22\",\n  \"new_time\": \"14:00\",\n  \"reason\": \"Schedule conflict\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/reschedule",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "reschedule"]
+            },
+            "description": "Reschedule a confirmed consultation (max 3 times)"
+          }
+        },
+        {
+          "name": "Get Reschedule History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/reschedule-history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "reschedule-history"]
+            },
+            "description": "Get reschedule history for a consultation"
+          }
+        },
+        {
+          "name": "Cancel Consultation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Personal emergency\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "cancel"]
+            },
+            "description": "Cancel consultation (24hr advance notice required)"
+          }
+        },
+        {
+          "name": "[Lawyer] Complete Consultation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Discussed property dispute resolution options. Client will provide documents for review.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/consultations/{{consultation_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "consultations", "{{consultation_id}}", "complete"]
+            },
+            "description": "Mark consultation as completed (lawyer only)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Chat",
+      "description": "Real-time messaging between users and lawyers",
+      "item": [
+        {
+          "name": "Get or Create Chat Room",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.room) {",
+                  "        pm.collectionVariables.set('room_id', response.room.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consultation_id\": \"{{consultation_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms"]
+            },
+            "description": "Get or create chat room for a consultation"
+          }
+        },
+        {
+          "name": "Get My Chat Rooms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Get user's chat rooms"
+          }
+        },
+        {
+          "name": "Get Chat Room",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}"]
+            },
+            "description": "Get specific chat room details"
+          }
+        },
+        {
+          "name": "Get Room by Consultation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/consultation/{{consultation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "consultation", "{{consultation_id}}"]
+            },
+            "description": "Get chat room by consultation ID"
+          }
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/messages?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "messages"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "before", "value": "", "disabled": true, "description": "Message ID for cursor pagination" },
+                { "key": "after", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Get messages from a chat room"
+          }
+        },
+        {
+          "name": "Send Message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.message) {",
+                  "        pm.collectionVariables.set('message_id', response.message.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello, I have a question about my case.\",\n  \"message_type\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "messages"]
+            },
+            "description": "Send a text message"
+          }
+        },
+        {
+          "name": "Edit Message",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello, I have an updated question about my case.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/messages/{{message_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "messages", "{{message_id}}"]
+            },
+            "description": "Edit a sent message"
+          }
+        },
+        {
+          "name": "Delete Message",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delete_for_all\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/messages/{{message_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "messages", "{{message_id}}"]
+            },
+            "description": "Delete a message"
+          }
+        },
+        {
+          "name": "Mark Messages as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"up_to_message_id\": \"{{message_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "read"]
+            },
+            "description": "Mark messages as read"
+          }
+        },
+        {
+          "name": "Update Typing Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_typing\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/typing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "typing"]
+            },
+            "description": "Update typing indicator"
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/unread",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "unread"]
+            },
+            "description": "Get total unread message count"
+          }
+        },
+        {
+          "name": "Search Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/search?q=property&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "search"],
+              "query": [
+                { "key": "q", "value": "property", "description": "Search query" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Search messages in a room"
+          }
+        },
+        {
+          "name": "Get Room Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/media?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "media"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "type", "value": "", "disabled": true, "description": "Filter: image, document" }
+              ]
+            },
+            "description": "Get media/attachments from a room"
+          }
+        },
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "File to upload (max 10MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "upload"]
+            },
+            "description": "Upload a file attachment"
+          }
+        },
+        {
+          "name": "Send File Message",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "File to send"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/file-message",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "file-message"]
+            },
+            "description": "Upload and send file in one request"
+          }
+        },
+        {
+          "name": "Archive Chat Room",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chat/rooms/{{room_id}}/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chat", "rooms", "{{room_id}}", "archive"]
+            },
+            "description": "Archive a chat room"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🤖 Chatbot",
+      "description": "AI legal assistant with domain detection",
+      "item": [
+        {
+          "name": "Send Query",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"I need help with a divorce case. What are my rights regarding child custody?\",\n  \"language\": \"english\",\n  \"session_id\": \"{{$guid}}\",\n  \"city\": \"Mumbai\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "query"]
+            },
+            "description": "Send legal query - auto-detects domain and recommends lawyers"
+          }
+        },
+        {
+          "name": "Send Query (Hindi)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"मुझे तलाक के बारे में जानकारी चाहिए। बच्चों की कस्टडी के बारे में क्या कानून है?\",\n  \"language\": \"hindi\",\n  \"session_id\": \"{{$guid}}\",\n  \"city\": \"Delhi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "query"]
+            },
+            "description": "Send legal query in Hindi"
+          }
+        },
+        {
+          "name": "Get Cost Estimate",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"case_type\": \"family\",\n  \"city\": \"Mumbai\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/cost-estimate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "cost-estimate"]
+            },
+            "description": "Get estimated legal costs for a case type"
+          }
+        },
+        {
+          "name": "Get Chat History",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/history/{{session_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "history", "{{session_id}}"]
+            },
+            "description": "Get chatbot conversation history"
+          }
+        },
+        {
+          "name": "Get Legal Domains",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/domains?language=english",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "domains"],
+              "query": [
+                { "key": "language", "value": "english", "description": "english or hindi" }
+              ]
+            },
+            "description": "Get all available legal domains"
+          }
+        },
+        {
+          "name": "Get Lawyers by Domain",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/chatbot/lawyers/family?city=Mumbai&limit=15&min_rating=4",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "chatbot", "lawyers", "family"],
+              "query": [
+                { "key": "city", "value": "Mumbai" },
+                { "key": "limit", "value": "15" },
+                { "key": "min_rating", "value": "4" },
+                { "key": "max_fee", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Get recommended lawyers for a specific domain"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔔 Notifications",
+      "description": "User notifications and preferences",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications?page=1&limit=20&is_read=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "is_read", "value": "false", "description": "Filter: true, false" },
+                { "key": "category", "value": "", "disabled": true, "description": "Filter by category" }
+              ]
+            },
+            "description": "Get user's notifications with filters"
+          }
+        },
+        {
+          "name": "Get Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/unread-count",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "unread-count"]
+            },
+            "description": "Get unread notification count with breakdown"
+          }
+        },
+        {
+          "name": "Get Single Notification",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/{{notification_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "{{notification_id}}"]
+            },
+            "description": "Get single notification details"
+          }
+        },
+        {
+          "name": "Mark as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/{{notification_id}}/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "{{notification_id}}", "read"]
+            },
+            "description": "Mark notification as read"
+          }
+        },
+        {
+          "name": "Mark Multiple as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notification_ids\": [\"id1\", \"id2\", \"id3\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/read-multiple",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "read-multiple"]
+            },
+            "description": "Mark multiple notifications as read"
+          }
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": \"consultation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/read-all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "read-all"]
+            },
+            "description": "Mark all notifications as read (optional category filter)"
+          }
+        },
+        {
+          "name": "Archive Notification",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/{{notification_id}}/archive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "{{notification_id}}", "archive"]
+            },
+            "description": "Archive a notification"
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/{{notification_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "{{notification_id}}"]
+            },
+            "description": "Delete a notification"
+          }
+        },
+        {
+          "name": "Delete Multiple",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notification_ids\": [\"id1\", \"id2\", \"id3\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/delete-multiple",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "delete-multiple"]
+            },
+            "description": "Delete multiple notifications"
+          }
+        },
+        {
+          "name": "Get Preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "preferences"]
+            },
+            "description": "Get notification preferences"
+          }
+        },
+        {
+          "name": "Update Preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"push_enabled\": true,\n  \"email_enabled\": true,\n  \"sms_enabled\": false,\n  \"categories\": {\n    \"consultation\": { \"push\": true, \"email\": true, \"sms\": true },\n    \"payment\": { \"push\": true, \"email\": true, \"sms\": true },\n    \"reminder\": { \"push\": true, \"email\": false, \"sms\": false },\n    \"marketing\": { \"push\": false, \"email\": false, \"sms\": false }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications/preferences",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications", "preferences"]
+            },
+            "description": "Update notification preferences"
+          }
+        },
+        {
+          "name": "[Admin] Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"title\": \"Important Update\",\n  \"body\": \"Your consultation has been confirmed.\",\n  \"notification_type\": \"consultation\",\n  \"category\": \"consultation\",\n  \"priority\": \"high\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "notifications"]
+            },
+            "description": "Create notification for user (admin only)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⭐ Reviews",
+      "description": "Lawyer reviews and ratings",
+      "item": [
+        {
+          "name": "Get Lawyer Reviews",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reviews/lawyer/{{lawyer_id}}?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reviews", "lawyer", "{{lawyer_id}}"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Get reviews for a specific lawyer"
+          }
+        },
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consultation_id\": \"{{consultation_id}}\",\n  \"rating\": 5,\n  \"review_text\": \"Excellent lawyer! Very professional and knowledgeable. Helped me understand my rights clearly.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reviews/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reviews", "create"]
+            },
+            "description": "Create review for completed consultation"
+          }
+        }
+      ]
+    },
+    {
+      "name": "📁 Cases",
+      "description": "User case management",
+      "item": [
+        {
+          "name": "Create Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.case) {",
+                  "        pm.collectionVariables.set('case_id', response.case.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Property Dispute - Land Boundary\",\n  \"description\": \"Dispute with neighbor regarding land boundary demarcation\",\n  \"case_type\": \"property\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/cases/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "cases", "create"]
+            },
+            "description": "Create a new case"
+          }
+        },
+        {
+          "name": "Get My Cases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/cases/my-cases?status=active&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "cases", "my-cases"],
+              "query": [
+                { "key": "status", "value": "active", "description": "Filter: active, closed, pending" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Get user's cases"
+          }
+        },
+        {
+          "name": "Get Case by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/cases/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "cases", "{{case_id}}"]
+            },
+            "description": "Get specific case details"
+          }
+        },
+        {
+          "name": "Update Case",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Property Dispute - Updated\",\n  \"status\": \"pending\",\n  \"notes\": \"Waiting for survey report\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/cases/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "cases", "{{case_id}}"]
+            },
+            "description": "Update case details"
+          }
+        },
+        {
+          "name": "Delete Case",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/cases/{{case_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "cases", "{{case_id}}"]
+            },
+            "description": "Delete a case"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⏰ Reminders",
+      "description": "Case and consultation reminders",
+      "item": [
+        {
+          "name": "Create Reminder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.reminder) {",
+                  "        pm.collectionVariables.set('reminder_id', response.reminder.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Submit Documents\",\n  \"description\": \"Submit property documents to lawyer\",\n  \"remind_at\": \"2025-01-20T10:00:00Z\",\n  \"case_id\": \"{{case_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "create"]
+            },
+            "description": "Create a new reminder"
+          }
+        },
+        {
+          "name": "Get My Reminders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/my-reminders?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "my-reminders"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Get user's reminders"
+          }
+        },
+        {
+          "name": "Get Upcoming Reminders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/upcoming?days=7",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "upcoming"],
+              "query": [
+                { "key": "days", "value": "7", "description": "Days ahead to look" }
+              ]
+            },
+            "description": "Get upcoming reminders"
+          }
+        },
+        {
+          "name": "Update Reminder",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Submit Documents - Updated\",\n  \"remind_at\": \"2025-01-22T10:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/{{reminder_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "{{reminder_id}}"]
+            },
+            "description": "Update reminder"
+          }
+        },
+        {
+          "name": "Delete Reminder",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/{{reminder_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "{{reminder_id}}"]
+            },
+            "description": "Delete a reminder"
+          }
+        },
+        {
+          "name": "[Admin] Mark as Sent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/{{reminder_id}}/mark-sent",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "{{reminder_id}}", "mark-sent"]
+            },
+            "description": "Mark reminder as sent (admin/cron)"
+          }
+        },
+        {
+          "name": "[Admin] Process Due Reminders",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/{{api_version}}/reminders/process-due",
+              "host": ["{{base_url}}"],
+              "path": ["api", "{{api_version}}", "reminders", "process-due"]
+            },
+            "description": "Process all due reminders (admin/cron)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "👑 Admin",
+      "description": "Admin panel endpoints - requires admin role",
+      "item": [
+        {
+          "name": "📊 Dashboard",
+          "item": [
+            {
+              "name": "Get Dashboard",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "dashboard"]
+                },
+                "description": "Get admin dashboard with key metrics"
+              }
+            },
+            {
+              "name": "Get System Health",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/system/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "system", "health"]
+                },
+                "description": "Get system health status"
+              }
+            },
+            {
+              "name": "Get System Stats",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/system/stats",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "system", "stats"]
+                },
+                "description": "Get system statistics"
+              }
+            }
+          ]
+        },
+        {
+          "name": "👨‍⚖️ Lawyer Management",
+          "item": [
+            {
+              "name": "Get Pending Lawyers",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/lawyers/pending?page=1&limit=10",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "lawyers", "pending"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "10" }
+                  ]
+                },
+                "description": "Get lawyers pending verification"
+              }
+            },
+            {
+              "name": "Verify/Reject Lawyer",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"action\": \"verify\",\n  \"notes\": \"Documents verified successfully\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/lawyers/{{lawyer_id}}/verify",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "lawyers", "{{lawyer_id}}", "verify"]
+                },
+                "description": "Verify or reject lawyer registration. Action: 'verify' or 'reject'"
+              }
+            },
+            {
+              "name": "Get Lawyer Performance",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/lawyers/performance?period=30d&page=1&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "lawyers", "performance"],
+                  "query": [
+                    { "key": "period", "value": "30d", "description": "7d, 30d, 90d, 1y" },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                },
+                "description": "Get lawyer performance metrics"
+              }
+            }
+          ]
+        },
+        {
+          "name": "👥 User Management",
+          "item": [
+            {
+              "name": "List Users",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/users?role=user&page=1&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "users"],
+                  "query": [
+                    { "key": "role", "value": "user", "description": "Filter: user, lawyer, admin" },
+                    { "key": "status", "value": "", "disabled": true },
+                    { "key": "search", "value": "", "disabled": true },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                },
+                "description": "List all users with filters"
+              }
+            },
+            {
+              "name": "Get User Details",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/users/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "users", "{{user_id}}"]
+                },
+                "description": "Get detailed user information"
+              }
+            },
+            {
+              "name": "Ban/Unban User",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_banned\": true,\n  \"reason\": \"Violation of terms of service\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/users/{{user_id}}/ban",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "users", "{{user_id}}", "ban"]
+                },
+                "description": "Ban or unban a user"
+              }
+            }
+          ]
+        },
+        {
+          "name": "📋 Consultations",
+          "item": [
+            {
+              "name": "List Consultations",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/consultations?status=confirmed&page=1&limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "consultations"],
+                  "query": [
+                    { "key": "status", "value": "confirmed" },
+                    { "key": "date_from", "value": "", "disabled": true },
+                    { "key": "date_to", "value": "", "disabled": true },
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                },
+                "description": "List all consultations"
+              }
+            },
+            {
+              "name": "Process Refund",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Lawyer unavailable\",\n  \"refund_amount\": 1500\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/consultations/{{consultation_id}}/refund",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "consultations", "{{consultation_id}}", "refund"]
+                },
+                "description": "Process refund for a consultation"
+              }
+            }
+          ]
+        },
+        {
+          "name": "💰 Revenue",
+          "item": [
+            {
+              "name": "Get Revenue Analytics",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/revenue?period=30d&group_by=day",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "revenue"],
+                  "query": [
+                    { "key": "period", "value": "30d", "description": "7d, 30d, 90d, 1y" },
+                    { "key": "group_by", "value": "day", "description": "day, week, month" }
+                  ]
+                },
+                "description": "Get revenue analytics and trends"
+              }
+            }
+          ]
+        },
+        {
+          "name": "📢 Announcements",
+          "item": [
+            {
+              "name": "List Announcements",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/announcements",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "announcements"]
+                },
+                "description": "List all announcements"
+              }
+            },
+            {
+              "name": "Create Announcement",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Platform Maintenance\",\n  \"content\": \"The platform will undergo maintenance on January 25th from 2 AM to 4 AM IST.\",\n  \"type\": \"info\",\n  \"target_audience\": \"all\",\n  \"is_active\": true,\n  \"expires_at\": \"2025-01-26T00:00:00Z\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/announcements",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "announcements"]
+                },
+                "description": "Create a new announcement"
+              }
+            },
+            {
+              "name": "Update Announcement",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_active\": false\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/announcements/{{announcement_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "announcements", "{{announcement_id}}"]
+                },
+                "description": "Update an announcement"
+              }
+            },
+            {
+              "name": "Delete Announcement",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/announcements/{{announcement_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "announcements", "{{announcement_id}}"]
+                },
+                "description": "Delete an announcement"
+              }
+            }
+          ]
+        },
+        {
+          "name": "⚠️ Disputes",
+          "item": [
+            {
+              "name": "List Disputes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/disputes",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "disputes"]
+                },
+                "description": "List all disputes"
+              }
+            },
+            {
+              "name": "Get Dispute Details",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/disputes/{{dispute_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "disputes", "{{dispute_id}}"]
+                },
+                "description": "Get dispute details"
+              }
+            },
+            {
+              "name": "Assign Dispute",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"assigned_to\": \"admin_user_id\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/disputes/{{dispute_id}}/assign",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "disputes", "{{dispute_id}}", "assign"]
+                },
+                "description": "Assign dispute to admin"
+              }
+            },
+            {
+              "name": "Resolve Dispute",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"resolution\": \"Refund issued to user. Lawyer warned.\",\n  \"action_taken\": \"refund\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/disputes/{{dispute_id}}/resolve",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "disputes", "{{dispute_id}}", "resolve"]
+                },
+                "description": "Resolve a dispute"
+              }
+            }
+          ]
+        },
+        {
+          "name": "💳 Refunds",
+          "item": [
+            {
+              "name": "List Refunds",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/refunds",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "refunds"]
+                },
+                "description": "List all refunds"
+              }
+            }
+          ]
+        },
+        {
+          "name": "⚙️ Settings",
+          "item": [
+            {
+              "name": "Get Platform Settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/settings",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "settings"]
+                },
+                "description": "Get platform settings"
+              }
+            },
+            {
+              "name": "Update Platform Settings",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"platform_fee_percentage\": 10,\n  \"min_consultation_fee\": 500,\n  \"max_consultation_fee\": 10000,\n  \"cancellation_hours\": 24\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/settings",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "settings"]
+                },
+                "description": "Update platform settings"
+              }
+            }
+          ]
+        },
+        {
+          "name": "📤 Notifications",
+          "item": [
+            {
+              "name": "Send Notification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"target\": \"all\",\n  \"title\": \"New Feature Announcement\",\n  \"body\": \"We have launched video consultations! Book your first session today.\",\n  \"channels\": [\"push\", \"email\"]\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/notifications/send",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "notifications", "send"]
+                },
+                "description": "Send notification to users. Target: 'all', 'users', 'lawyers', or specific user_id"
+              }
+            }
+          ]
+        },
+        {
+          "name": "📊 Reports",
+          "item": [
+            {
+              "name": "Export Report",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/reports/export?type=consultations&format=csv&date_from=2025-01-01&date_to=2025-01-31",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "reports", "export"],
+                  "query": [
+                    { "key": "type", "value": "consultations", "description": "consultations, users, lawyers, revenue" },
+                    { "key": "format", "value": "csv", "description": "csv, json, xlsx" },
+                    { "key": "date_from", "value": "2025-01-01" },
+                    { "key": "date_to", "value": "2025-01-31" }
+                  ]
+                },
+                "description": "Export report data"
+              }
+            }
+          ]
+        },
+        {
+          "name": "📜 Audit Logs",
+          "item": [
+            {
+              "name": "Get Audit Logs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/audit-logs?page=1&limit=50",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "audit-logs"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "50" },
+                    { "key": "action", "value": "", "disabled": true },
+                    { "key": "user_id", "value": "", "disabled": true }
+                  ]
+                },
+                "description": "Get audit logs"
+              }
+            },
+            {
+              "name": "Get Audit Stats",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/audit-logs/stats",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "audit-logs", "stats"]
+                },
+                "description": "Get audit statistics"
+              }
+            },
+            {
+              "name": "Get User Audit Logs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/audit-logs/user/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "audit-logs", "user", "{{user_id}}"]
+                },
+                "description": "Get audit logs for specific user"
+              }
+            },
+            {
+              "name": "Get Entity Audit Logs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/admin/audit-logs/entity/consultation/{{consultation_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "admin", "audit-logs", "entity", "consultation", "{{consultation_id}}"]
+                },
+                "description": "Get audit logs for specific entity"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔗 Webhooks",
+      "description": "Webhook endpoints for external services",
+      "item": [
+        {
+          "name": "Razorpay Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Razorpay-Signature", "value": "webhook_signature_here" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_xxxxxxxxxxxxx\",\n        \"order_id\": \"order_xxxxxxxxxxxxx\",\n        \"amount\": 150000,\n        \"status\": \"captured\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhooks/razorpay",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "razorpay"]
+            },
+            "description": "Razorpay payment webhook endpoint"
+          }
+        },
+        {
+          "name": "Supabase Webhook",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"UPDATE\",\n  \"table\": \"consultations\",\n  \"record\": {\n    \"id\": \"consultation_id\",\n    \"status\": \"completed\"\n  },\n  \"old_record\": {\n    \"status\": \"confirmed\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/webhooks/supabase",
+              "host": ["{{base_url}}"],
+              "path": ["webhooks", "supabase"]
+            },
+            "description": "Supabase database webhook endpoint"
+          }
+        }
+      ]
+    }
+  ]
+}

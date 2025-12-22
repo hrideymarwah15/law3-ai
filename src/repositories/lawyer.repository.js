@@ -153,28 +153,43 @@ class LawyerRepository extends BaseRepository {
   /**
    * Verify lawyer
    * @param {string} id - Lawyer ID
+   * @param {string} [verifiedById] - Admin user ID who verified
+   * @param {Object} [verificationData] - Additional verification data
    * @returns {Promise<Object>} Updated lawyer
    */
-  async verify(id) {
+  async verify(id, verifiedById = null, verificationData = {}) {
     return this.update(id, {
       is_verified: true,
       verification_status: 'verified',
       verified_at: new Date().toISOString(),
+      verified_by: verifiedById,
       rejection_reason: null,
+      rejected_at: null,
+      rejected_by: null,
+      ...verificationData,
     });
   }
 
   /**
    * Reject lawyer verification
    * @param {string} id - Lawyer ID
+   * @param {string} [rejectedById] - Admin user ID who rejected
    * @param {string} reason - Rejection reason
    * @returns {Promise<Object>} Updated lawyer
    */
-  async reject(id, reason) {
+  async reject(id, rejectedById = null, reason) {
+    // Handle old API where reason is second parameter
+    if (typeof rejectedById === 'string' && !reason) {
+      reason = rejectedById;
+      rejectedById = null;
+    }
+    
     return this.update(id, {
       is_verified: false,
       verification_status: 'rejected',
       rejection_reason: reason,
+      rejected_at: new Date().toISOString(),
+      rejected_by: rejectedById,
     });
   }
 

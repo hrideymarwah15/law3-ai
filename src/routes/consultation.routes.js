@@ -71,11 +71,7 @@ router.post(
   asyncHandler(consultationController.confirmPayment)
 );
 
-router.get(
-  '/my-consultations',
-  validate(getConsultationsSchema),
-  asyncHandler(consultationController.getMyConsultations)
-);
+// Note: /my-consultations is already defined above - removed duplicate
 
 router.put(
   '/:consultation_id/cancel',

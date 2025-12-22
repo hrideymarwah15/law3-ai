@@ -28,6 +28,7 @@ class AuthController {
         password,
         options: {
           data: { first_name: finalFirstName, last_name: finalLastName },
+          emailRedirectTo: `${process.env.FRONTEND_URL}/auth/callback`,
         },
       };
 
@@ -45,6 +46,46 @@ class AuthController {
           throw new ConflictError('User already exists with this email or phone');
         }
         throw new ValidationError(error.message);
+      }
+
+      // Create user profile in public.users table (fallback if trigger doesn't exist)
+      if (data.user?.id) {
+        try {
+          const { error: profileError } = await supabaseAdmin
+            .from('users')
+            .upsert({
+              id: data.user.id,
+              email: data.user.email || null,
+              phone: data.user.phone || null,
+              first_name: finalFirstName || 'User',
+              last_name: finalLastName || null,
+              role: 'user',
+              status: 'active',
+              is_active: true,
+              is_email_verified: false,
+              is_phone_verified: false,
+              preferred_language: 'en',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'id',
+              ignoreDuplicates: false,
+            });
+
+          if (profileError) {
+            logger.warn({ 
+              message: 'Profile creation warning (may already exist via trigger)', 
+              error: profileError.message,
+              userId: data.user.id 
+            });
+          }
+        } catch (profileErr) {
+          logger.warn({ 
+            message: 'Profile upsert fallback error', 
+            error: profileErr.message,
+            userId: data.user.id 
+          });
+        }
       }
 
       logger.info({ 
@@ -469,6 +510,91 @@ class AuthController {
         success: true,
         message: 'Profile completed',
         user: data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /auth/sync-profile
+   * Create/sync user profile from auth token
+   * Use this if user exists in auth.users but not in public.users
+   */
+  async syncProfile(req, res, next) {
+    try {
+      // Extract token from Authorization header
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new UnauthorizedError('Missing or invalid authorization header');
+      }
+
+      const token = authHeader.split(' ')[1];
+
+      // Verify token with Supabase
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        throw new UnauthorizedError('Invalid or expired token');
+      }
+
+      // Check if profile already exists
+      const { data: existingProfile } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (existingProfile) {
+        return res.json({
+          success: true,
+          message: 'Profile already exists',
+          user: existingProfile,
+        });
+      }
+
+      // Extract name from user metadata
+      const metadata = user.user_metadata || {};
+      let firstName = metadata.first_name || metadata.name?.split(' ')[0] || 'User';
+      let lastName = metadata.last_name || metadata.name?.split(' ').slice(1).join(' ') || null;
+
+      // Create new profile
+      const { data: newProfile, error: createError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email || null,
+          phone: user.phone || null,
+          first_name: firstName,
+          last_name: lastName,
+          role: 'user',
+          status: 'active',
+          is_active: true,
+          is_email_verified: !!user.email_confirmed_at,
+          is_phone_verified: !!user.phone_confirmed_at,
+          preferred_language: metadata.preferred_language || 'en',
+          created_at: user.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        logger.error({ 
+          message: 'Failed to create profile', 
+          error: createError.message,
+          userId: user.id 
+        });
+        throw new ValidationError('Failed to create user profile: ' + createError.message);
+      }
+
+      logger.info({ message: 'Profile synced', userId: user.id });
+
+      res.status(201).json({
+        success: true,
+        message: 'Profile created successfully',
+        user: newProfile,
       });
     } catch (error) {
       next(error);

@@ -149,18 +149,24 @@ class ConsultationRepository extends BaseRepository {
    * @param {string} lawyerId - Lawyer ID
    * @param {string} date - Booking date
    * @param {string} time - Booking time
+   * @param {string} [excludeConsultationId] - Consultation ID to exclude (for rescheduling)
    * @returns {Promise<boolean>} Is available
    */
-  async isSlotAvailable(lawyerId, date, time) {
-    const { data } = await this.db
+  async isSlotAvailable(lawyerId, date, time, excludeConsultationId = null) {
+    let query = this.db
       .from(this.tableName)
       .select('id')
       .eq('lawyer_id', lawyerId)
       .eq('booking_date', date)
       .eq('booking_time', time)
-      .in('status', ['pending', 'confirmed'])
-      .limit(1)
-      .single();
+      .in('status', ['pending', 'confirmed']);
+    
+    // Exclude current consultation when rescheduling
+    if (excludeConsultationId) {
+      query = query.neq('id', excludeConsultationId);
+    }
+
+    const { data } = await query.limit(1).single();
 
     return !data;
   }

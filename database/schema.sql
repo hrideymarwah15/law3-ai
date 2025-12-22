@@ -901,6 +901,7 @@ CREATE TABLE chatbot_interactions (
     -- Context
     language VARCHAR(20) NOT NULL DEFAULT 'english',
     detected_intent VARCHAR(100),
+    detected_domain VARCHAR(50), -- Auto-detected legal domain (criminal, family, property, etc.)
     detected_entities JSONB DEFAULT '[]'::jsonb,
     confidence_score DECIMAL(5, 4),
     
@@ -924,6 +925,7 @@ CREATE INDEX idx_chatbot_session ON chatbot_interactions(session_id);
 CREATE INDEX idx_chatbot_conversation ON chatbot_interactions(conversation_id) WHERE conversation_id IS NOT NULL;
 CREATE INDEX idx_chatbot_language ON chatbot_interactions(language);
 CREATE INDEX idx_chatbot_intent ON chatbot_interactions(detected_intent) WHERE detected_intent IS NOT NULL;
+CREATE INDEX idx_chatbot_domain ON chatbot_interactions(detected_domain) WHERE detected_domain IS NOT NULL;
 CREATE INDEX idx_chatbot_created_at ON chatbot_interactions(created_at);
 
 -- ============================================

@@ -197,7 +197,7 @@ class ChatRepository {
       .single();
 
     if (error) {
-      logger.error({ message: 'Failed to create message', error: error.message, roomId });
+      logger.error({ message: 'Failed to create message', error: error.message, room_id });
     }
 
     return { data, error };

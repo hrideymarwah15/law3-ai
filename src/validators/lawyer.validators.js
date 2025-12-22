@@ -145,14 +145,10 @@ const lawyerRegistrationSchema = {
 
 /**
  * Update registration request (for resubmission)
+ * Note: Uses authenticated user's ID, no request_id param needed
  */
 const updateRegistrationSchema = {
-  params: z.object({
-    request_id: uuid,
-  }),
-  body: lawyerRegistrationSchema.body.partial().extend({
-    // Must include at least one field
-  }).refine(
+  body: lawyerRegistrationSchema.body.partial().refine(
     data => Object.keys(data).length > 0,
     { message: 'At least one field must be provided for update' }
   ),

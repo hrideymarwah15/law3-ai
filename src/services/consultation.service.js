@@ -83,11 +83,15 @@ class ConsultationService extends BaseService {
         throw new ValidationError(`Consultation must be scheduled at least ${minAdvanceHours} hours in advance`);
       }
 
+      // Parse scheduled_at into date and time components
+      const bookingDate = scheduledDate.toISOString().split('T')[0];
+      const bookingTime = scheduledDate.toTimeString().slice(0, 5);
+
       // Check slot availability
       const isAvailable = await this.consultationRepository.isSlotAvailable(
         lawyer_id,
-        scheduled_at,
-        60 // Default duration in minutes
+        bookingDate,
+        bookingTime
       );
 
       if (!isAvailable) {
@@ -98,6 +102,8 @@ class ConsultationService extends BaseService {
       const consultation = await this.consultationRepository.create({
         user_id,
         lawyer_id,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
         scheduled_at,
         type: type || 'video',
         status: 'pending',
@@ -271,11 +277,15 @@ class ConsultationService extends BaseService {
         throw new ValidationError('New time must be in the future');
       }
 
+      // Parse new datetime into date and time components
+      const bookingDate = newDate.toISOString().split('T')[0];
+      const bookingTime = newDate.toTimeString().slice(0, 5);
+
       // Check availability
       const isAvailable = await this.consultationRepository.isSlotAvailable(
         consultation.lawyer_id,
-        newScheduledAt,
-        60,
+        bookingDate,
+        bookingTime,
         consultationId // Exclude current consultation
       );
 
@@ -284,6 +294,8 @@ class ConsultationService extends BaseService {
       }
 
       const updated = await this.consultationRepository.update(consultationId, {
+        booking_date: bookingDate,
+        booking_time: bookingTime,
         scheduled_at: newScheduledAt,
         previous_scheduled_at: consultation.scheduled_at,
         rescheduled_by: actorId,

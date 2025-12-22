@@ -68,6 +68,14 @@ router.post(
   asyncHandler(authController.refresh)
 );
 
+// Sync profile - creates profile if user exists in auth but not in public.users
+// Does NOT require supabaseAuthMiddleware since profile may not exist
+router.post(
+  '/sync-profile',
+  rateLimiter.auth,
+  asyncHandler(authController.syncProfile)
+);
+
 // Protected routes
 router.get(
   '/me',
