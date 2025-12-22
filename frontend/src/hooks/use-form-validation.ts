@@ -50,7 +50,8 @@ export const registerSchema = z
     phone: phoneSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, 'Please confirm your password'),
-    acceptTerms: z.literal(true).refine(val => val === true, {
+    role: z.enum(['user', 'lawyer']),
+    acceptTerms: z.boolean().refine(val => val === true, {
       message: 'You must accept the terms and conditions',
     }),
   })
@@ -75,7 +76,7 @@ export const lawyerRegisterSchema = registerSchema
       .number()
       .min(0, 'Experience cannot be negative')
       .max(60, 'Please enter a valid experience'),
-    acceptTerms: z.literal(true).refine(val => val === true, {
+    acceptTerms: z.boolean().refine(val => val === true, {
       message: 'You must accept the terms and conditions',
     }),
   });

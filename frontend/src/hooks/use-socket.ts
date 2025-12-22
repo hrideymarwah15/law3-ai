@@ -266,8 +266,11 @@ export function useSocket(options: UseSocketOptions = {}) {
     };
   }, [autoConnect, isAuthenticated, tokens?.accessToken, connect, disconnect]);
 
+  // Getter for socket - to avoid accessing ref during render
+  const getSocket = useCallback(() => socketRef.current, []);
+
   return {
-    socket: socketRef.current,
+    getSocket,
     isConnected,
     lastError,
     connect,

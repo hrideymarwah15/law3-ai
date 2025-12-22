@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: config.seo.titleTemplate,
   },
   description: config.seo.defaultDescription,
-  keywords: config.seo.keywords,
+  keywords: [...config.seo.keywords],
   authors: [{ name: "Nyaay Saathi" }],
   creator: "Nyaay Saathi",
   publisher: "Nyaay Saathi",

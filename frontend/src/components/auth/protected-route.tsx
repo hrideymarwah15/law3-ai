@@ -42,7 +42,7 @@ function AuthLoadingScreen() {
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: ('client' | 'lawyer' | 'admin')[];
+  allowedRoles?: ('user' | 'lawyer' | 'admin')[];
   redirectTo?: string;
   fallback?: React.ReactNode;
 }
@@ -56,7 +56,7 @@ export function ProtectedRoute({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, isLoading, accessToken } = useAuthStore();
+  const { user, tokens, isAuthenticated, isLoading } = useAuthStore();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -68,14 +68,14 @@ export function ProtectedRoute({
       if (!isLoading) {
         setIsChecking(false);
         
-        if (!isAuthenticated || !accessToken) {
+        if (!isAuthenticated || !tokens?.accessToken) {
           // Not authenticated, redirect to login
           const redirectUrl = `${redirectTo}?redirect=${encodeURIComponent(pathname)}`;
           router.replace(redirectUrl);
           return;
         }
 
-        if (allowedRoles && user && !allowedRoles.includes(user.role as 'client' | 'lawyer' | 'admin')) {
+        if (allowedRoles && user && !allowedRoles.includes(user.role as 'user' | 'lawyer' | 'admin')) {
           // User doesn't have required role
           router.replace('/unauthorized');
           return;
@@ -84,7 +84,7 @@ export function ProtectedRoute({
     };
 
     checkAuth();
-  }, [isLoading, isAuthenticated, accessToken, user, allowedRoles, router, pathname, redirectTo]);
+  }, [isLoading, isAuthenticated, tokens, user, allowedRoles, router, pathname, redirectTo]);
 
   // Show loading while checking auth
   if (isChecking || isLoading) {
@@ -92,12 +92,12 @@ export function ProtectedRoute({
   }
 
   // If not authenticated, don't render children (redirect will happen)
-  if (!isAuthenticated || !accessToken) {
+  if (!isAuthenticated || !tokens?.accessToken) {
     return null;
   }
 
   // If role check fails, don't render children
-  if (allowedRoles && user && !allowedRoles.includes(user.role as 'client' | 'lawyer' | 'admin')) {
+  if (allowedRoles && user && !allowedRoles.includes(user.role as 'user' | 'lawyer' | 'admin')) {
     return null;
   }
 
@@ -167,7 +167,7 @@ interface ClientRouteProps {
 
 export function ClientRoute({ children, fallback }: ClientRouteProps) {
   return (
-    <ProtectedRoute allowedRoles={['client']} fallback={fallback}>
+    <ProtectedRoute allowedRoles={['user']} fallback={fallback}>
       {children}
     </ProtectedRoute>
   );
@@ -206,7 +206,7 @@ export function AdminRoute({ children, fallback }: AdminRouteProps) {
 export function withAuth<P extends object>(
   Component: React.ComponentType<P>,
   options?: {
-    allowedRoles?: ('client' | 'lawyer' | 'admin')[];
+    allowedRoles?: ('user' | 'lawyer' | 'admin')[];
     redirectTo?: string;
   }
 ) {

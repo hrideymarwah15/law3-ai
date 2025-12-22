@@ -18,10 +18,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { sidebarCollapsed } = useUIStore();
 
   return (
-    <ProtectedRoute allowedRoles={['client']}>
-      <div className="min-h-screen bg-muted/30">
+    <ProtectedRoute allowedRoles={['user']}>
+      <div className="min-h-screen bg-slate-50">
         {/* Sidebar - Desktop */}
-        <Sidebar variant="client" />
+        <Sidebar />
         
         {/* Main Content */}
         <main
@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </main>
 
         {/* Mobile Navigation */}
-        <MobileNav variant="client" />
+        <MobileNav />
       </div>
     </ProtectedRoute>
   );

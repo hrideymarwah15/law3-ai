@@ -36,7 +36,7 @@ import {
   Skeleton,
   Separator,
 } from '@/components/ui';
-import { lawyersApi, reviewsApi, queryKeys } from '@/lib/api';
+import { lawyerApi, reviewApi, queryKeys } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import type { LawyerProfile, Review } from '@/types';
@@ -72,16 +72,21 @@ function StatsCard({ icon: Icon, label, value }: { icon: React.ElementType; labe
 // ============================================
 
 function ReviewCard({ review }: { review: Review }) {
+  const clientName = review.user?.fullName || `${review.user?.firstName || ''} ${review.user?.lastName || ''}`.trim() || 'Anonymous';
+  const clientInitials = review.user 
+    ? `${review.user.firstName?.[0] || ''}${review.user.lastName?.[0] || ''}`.toUpperCase() 
+    : 'A';
+
   return (
     <Card className="p-6">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <Avatar
             size="md"
-            fallback={review.clientName?.split(' ').map(n => n[0]).join('') || 'A'}
+            fallback={review.isAnonymous ? 'A' : clientInitials}
           />
           <div>
-            <p className="font-medium">{review.isAnonymous ? 'Anonymous' : review.clientName}</p>
+            <p className="font-medium">{review.isAnonymous ? 'Anonymous' : clientName}</p>
             <p className="text-sm text-muted-foreground">{formatDate(review.createdAt)}</p>
           </div>
         </div>
@@ -102,11 +107,11 @@ function ReviewCard({ review }: { review: Review }) {
       {review.title && (
         <h4 className="font-medium mb-2">{review.title}</h4>
       )}
-      <p className="text-muted-foreground">{review.content}</p>
+      <p className="text-muted-foreground">{review.comment}</p>
       {review.lawyerResponse && (
         <div className="mt-4 p-4 rounded-lg bg-muted/50 border-l-2 border-primary">
           <p className="text-sm font-medium mb-1">Lawyer&apos;s Response:</p>
-          <p className="text-sm text-muted-foreground">{review.lawyerResponse}</p>
+          <p className="text-sm text-muted-foreground">{review.lawyerResponse.content}</p>
         </div>
       )}
     </Card>
@@ -125,13 +130,19 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
   // Fetch lawyer profile
   const { data: lawyer, isLoading: lawyerLoading } = useQuery({
     queryKey: queryKeys.lawyers.detail(lawyerId),
-    queryFn: () => lawyersApi.getLawyerById(lawyerId),
+    queryFn: async () => {
+      const response = await lawyerApi.getById(lawyerId);
+      return response.data;
+    },
   });
 
   // Fetch lawyer reviews
   const { data: reviewsData, isLoading: reviewsLoading } = useQuery({
-    queryKey: queryKeys.reviews.byLawyer(lawyerId),
-    queryFn: () => reviewsApi.getLawyerReviews(lawyerId, { page: 1, limit: 10 }),
+    queryKey: queryKeys.reviews.list({ lawyerId }),
+    queryFn: async () => {
+      const response = await reviewApi.list({ lawyerId, page: 1, limit: 10 });
+      return response.data;
+    },
     enabled: activeTab === 'reviews',
   });
 
@@ -157,7 +168,7 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
     );
   }
 
-  const initials = `${lawyer.firstName?.[0] || ''}${lawyer.lastName?.[0] || ''}`.toUpperCase();
+  const initials = `${lawyer.user?.firstName?.[0] || ''}${lawyer.user?.lastName?.[0] || ''}`.toUpperCase();
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -181,16 +192,16 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
               <div className="flex flex-col sm:flex-row gap-6">
                 <Avatar
                   size="2xl"
-                  src={lawyer.profilePhoto || undefined}
+                  src={lawyer.user?.avatar || undefined}
                   fallback={initials}
                   className="w-32 h-32"
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h1 className="text-2xl lg:text-3xl font-bold">
-                      Adv. {lawyer.firstName} {lawyer.lastName}
+                      Adv. {lawyer.user?.firstName} {lawyer.user?.lastName}
                     </h1>
-                    {lawyer.isVerified && (
+                    {lawyer.verificationStatus === 'verified' && (
                       <Badge variant="success" className="gap-1">
                         <CheckCircle className="h-3 w-3" />
                         Verified
@@ -199,7 +210,7 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
                   </div>
 
                   <p className="text-lg text-muted-foreground mb-4">
-                    {lawyer.practiceAreas?.[0]} Specialist
+                    {lawyer.practiceAreas?.[0]?.name || 'Legal'} Specialist
                   </p>
 
                   <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -213,14 +224,14 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
                     </span>
                     <span className="flex items-center gap-1">
                       <MapPin className="h-4 w-4" />
-                      {lawyer.city}, {lawyer.state}
+                      {lawyer.barCouncilState}
                     </span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 mt-4">
                     {lawyer.practiceAreas?.map((area) => (
-                      <Badge key={area} variant="secondary">
-                        {area}
+                      <Badge key={area.id} variant="secondary">
+                        {area.name}
                       </Badge>
                     ))}
                   </div>
@@ -236,22 +247,26 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
               </div>
 
               <div className="flex flex-col gap-3 mb-6">
-                {lawyer.isAvailableForVideo && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <Video className="h-5 w-5 text-primary" />
-                    <span>Video Consultation Available</span>
-                  </div>
+                {lawyer.isAvailable && (
+                  <>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                      <Video className="h-5 w-5 text-primary" />
+                      <span>Video Consultation Available</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                      <span>Chat Consultation Available</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                      <Phone className="h-5 w-5 text-primary" />
+                      <span>Phone Consultation Available</span>
+                    </div>
+                  </>
                 )}
-                {lawyer.isAvailableForChat && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <MessageSquare className="h-5 w-5 text-primary" />
-                    <span>Chat Consultation Available</span>
-                  </div>
-                )}
-                {lawyer.isAvailableForCall && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                    <Phone className="h-5 w-5 text-primary" />
-                    <span>Phone Consultation Available</span>
+                {!lawyer.isAvailable && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-50 text-yellow-700">
+                    <Clock className="h-5 w-5" />
+                    <span>Currently unavailable for consultations</span>
                   </div>
                 )}
               </div>
@@ -329,11 +344,11 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
               <h2 className="text-xl font-semibold mb-4">Practice Areas</h2>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {lawyer.practiceAreas?.map((area) => (
-                  <div key={area} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <div key={area.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Award className="h-4 w-4 text-primary" />
                     </div>
-                    <span>{area}</span>
+                    <span>{area.name}</span>
                   </div>
                 ))}
               </div>
@@ -381,7 +396,7 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Registration Number</p>
-                  <p className="font-medium">{lawyer.barCouncilNumber}</p>
+                  <p className="font-medium">{lawyer.barCouncilId}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">State Bar Council</p>

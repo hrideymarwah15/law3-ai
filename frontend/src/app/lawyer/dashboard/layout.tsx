@@ -19,9 +19,9 @@ export default function LawyerLayout({ children }: LawyerLayoutProps) {
 
   return (
     <ProtectedRoute allowedRoles={['lawyer']}>
-      <div className="min-h-screen bg-muted/30">
+      <div className="min-h-screen bg-slate-50">
         {/* Sidebar - Desktop */}
-        <Sidebar variant="lawyer" />
+        <Sidebar />
         
         {/* Main Content */}
         <main
@@ -36,7 +36,7 @@ export default function LawyerLayout({ children }: LawyerLayoutProps) {
         </main>
 
         {/* Mobile Navigation */}
-        <MobileNav variant="lawyer" />
+        <MobileNav />
       </div>
     </ProtectedRoute>
   );

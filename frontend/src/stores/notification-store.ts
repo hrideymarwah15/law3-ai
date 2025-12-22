@@ -60,7 +60,7 @@ const initialState = {
 // ============================================
 
 export const useNotificationStore = create<NotificationState>()(
-  immer((set, get) => ({
+  immer((set) => ({
     ...initialState,
 
     // Notifications Actions

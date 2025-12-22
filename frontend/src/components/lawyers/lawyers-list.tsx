@@ -28,11 +28,15 @@ import {
   Avatar,
   Input,
   Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
   Checkbox,
   Skeleton,
   Separator,
 } from '@/components/ui';
-import { lawyersApi, queryKeys } from '@/lib/api';
+import { lawyerApi, queryKeys } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { config } from '@/config';
 import type { LawyerProfile } from '@/types';
@@ -126,13 +130,13 @@ function FilterSidebar({ filters, onFilterChange, onClearFilters, isOpen, onClos
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {config.practiceAreas.map((area) => (
                 <Checkbox
-                  key={area.value}
-                  label={area.label}
-                  checked={filters.practiceAreas.includes(area.value)}
+                  key={area.id}
+                  label={area.name}
+                  checked={filters.practiceAreas.includes(area.id)}
                   onCheckedChange={(checked) => {
                     const newAreas = checked
-                      ? [...filters.practiceAreas, area.value]
-                      : filters.practiceAreas.filter((a) => a !== area.value);
+                      ? [...filters.practiceAreas, area.id]
+                      : filters.practiceAreas.filter((a) => a !== area.id);
                     onFilterChange('practiceAreas', newAreas);
                   }}
                 />
@@ -148,14 +152,19 @@ function FilterSidebar({ filters, onFilterChange, onClearFilters, isOpen, onClos
             <Select
               value={filters.location}
               onValueChange={(value) => onFilterChange('location', value)}
-              options={[
-                { value: '', label: 'All Locations' },
-                ...config.states.map((state) => ({
-                  value: state.value,
-                  label: state.label,
-                })),
-              ]}
-            />
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Locations</SelectItem>
+                {config.states.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />
@@ -167,7 +176,7 @@ function FilterSidebar({ filters, onFilterChange, onClearFilters, isOpen, onClos
               {[0, 3, 3.5, 4, 4.5].map((rating) => (
                 <Button
                   key={rating}
-                  variant={filters.minRating === rating ? 'default' : 'outline'}
+                  variant={filters.minRating === rating ? 'primary' : 'outline'}
                   size="sm"
                   onClick={() => onFilterChange('minRating', rating)}
                 >
@@ -230,13 +239,13 @@ function FilterSidebar({ filters, onFilterChange, onClearFilters, isOpen, onClos
             <div className="space-y-2">
               {config.consultationTypes.map((type) => (
                 <Checkbox
-                  key={type.value}
-                  label={type.label}
-                  checked={filters.consultationType.includes(type.value)}
+                  key={type.id}
+                  label={type.name}
+                  checked={filters.consultationType.includes(type.id)}
                   onCheckedChange={(checked) => {
                     const newTypes = checked
-                      ? [...filters.consultationType, type.value]
-                      : filters.consultationType.filter((t) => t !== type.value);
+                      ? [...filters.consultationType, type.id]
+                      : filters.consultationType.filter((t) => t !== type.id);
                     onFilterChange('consultationType', newTypes);
                   }}
                 />
@@ -473,17 +482,19 @@ export function LawyersListPage() {
   // Query lawyers
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.lawyers.list(filters),
-    queryFn: () => lawyersApi.getLawyers({
-      search: filters.search,
-      practiceAreas: filters.practiceAreas,
-      state: filters.location,
-      minRating: filters.minRating,
-      maxFee: filters.maxFee,
-      languages: filters.languages,
-      sortBy: filters.sortBy,
-      page: 1,
-      limit: 20,
-    }),
+    queryFn: async () => {
+      const response = await lawyerApi.list({
+        practiceArea: filters.practiceAreas?.[0],
+        location: filters.location,
+        minRating: filters.minRating,
+        maxFee: filters.maxFee,
+        language: filters.languages?.[0],
+        sortBy: filters.sortBy,
+        page: 1,
+        limit: 20,
+      });
+      return response.data;
+    },
   });
 
   const handleFilterChange = useCallback((key: keyof FiltersState, value: FiltersState[keyof FiltersState]) => {
@@ -495,7 +506,7 @@ export function LawyersListPage() {
   }, []);
 
   const lawyers = data?.lawyers || [];
-  const totalCount = data?.total || 0;
+  const totalCount = data?.pagination?.total || 0;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -546,7 +557,7 @@ export function LawyersListPage() {
 
             <div className="hidden sm:flex border rounded-lg overflow-hidden">
               <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                variant={viewMode === 'grid' ? 'primary' : 'ghost'}
                 size="icon"
                 onClick={() => setViewMode('grid')}
                 className="rounded-none"
@@ -554,7 +565,7 @@ export function LawyersListPage() {
                 <Grid3X3 className="h-4 w-4" />
               </Button>
               <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                variant={viewMode === 'list' ? 'primary' : 'ghost'}
                 size="icon"
                 onClick={() => setViewMode('list')}
                 className="rounded-none"

@@ -30,9 +30,9 @@ import {
   Separator,
 } from '@/components/ui';
 import { useAuthStore } from '@/stores';
-import { consultationsApi, queryKeys } from '@/lib/api';
+import { consultationApi, queryKeys } from '@/lib/api';
 import { cn, formatDate, formatTime, formatCurrency } from '@/lib/utils';
-import type { Consultation } from '@/types';
+import type { Consultation, ConsultationStatus } from '@/types';
 
 // ============================================
 // Animation Variants
@@ -60,20 +60,21 @@ interface ConsultationCardProps {
 }
 
 function ConsultationCard({ consultation }: ConsultationCardProps) {
-  const statusColors = {
+  const statusColors: Record<ConsultationStatus, string> = {
     pending: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
     confirmed: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
     in_progress: 'bg-green-500/10 text-green-600 border-green-500/20',
     completed: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
     cancelled: 'bg-red-500/10 text-red-600 border-red-500/20',
+    no_show: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
   };
 
-  const clientName = consultation.client 
-    ? `${consultation.client.firstName} ${consultation.client.lastName}`
+  const clientName = consultation.user 
+    ? `${consultation.user.firstName} ${consultation.user.lastName}`
     : 'Unknown Client';
   
-  const clientInitials = consultation.client
-    ? `${consultation.client.firstName?.[0] || ''}${consultation.client.lastName?.[0] || ''}`.toUpperCase()
+  const clientInitials = consultation.user
+    ? `${consultation.user.firstName?.[0] || ''}${consultation.user.lastName?.[0] || ''}`.toUpperCase()
     : 'UC';
 
   return (
@@ -88,7 +89,7 @@ function ConsultationCard({ consultation }: ConsultationCardProps) {
             <div>
               <h4 className="font-medium truncate">{clientName}</h4>
               <p className="text-sm text-muted-foreground truncate">
-                {consultation.practiceArea}
+                {consultation.practiceArea?.name || 'General'}
               </p>
             </div>
             <Badge
@@ -112,12 +113,12 @@ function ConsultationCard({ consultation }: ConsultationCardProps) {
         <div className="flex flex-col gap-2">
           {consultation.status === 'pending' && (
             <>
-              <Button size="sm" variant="default">Accept</Button>
+              <Button size="sm" variant="primary">Accept</Button>
               <Button size="sm" variant="outline">Decline</Button>
             </>
           )}
           {consultation.status === 'confirmed' && (
-            <Button size="sm" variant="default">
+            <Button size="sm" variant="primary">
               <Video className="h-4 w-4 mr-1" />
               Join
             </Button>
@@ -191,8 +192,7 @@ function QuickStats() {
         title="Pending Requests"
         value={5}
         icon={<AlertCircle className="h-5 w-5" />}
-        variant="warning"
-        action={{ label: 'Review', href: '/lawyer/consultations?status=pending' }}
+        description="Review pending"
       />
       <StatCard
         title="This Month's Earnings"
@@ -220,10 +220,13 @@ export function LawyerDashboard() {
   // Fetch today's consultations
   const { data: consultationsData, isLoading: consultationsLoading } = useQuery({
     queryKey: queryKeys.consultations.list({ limit: 5 }),
-    queryFn: () => consultationsApi.getConsultations({ 
-      page: 1, 
-      limit: 5 
-    }),
+    queryFn: async () => {
+      const response = await consultationApi.list({ 
+        page: 1, 
+        limit: 5 
+      });
+      return response.data;
+    },
   });
 
   const consultations = consultationsData?.consultations || [];

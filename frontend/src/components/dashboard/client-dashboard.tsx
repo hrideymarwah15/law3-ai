@@ -26,9 +26,9 @@ import {
   Separator,
 } from '@/components/ui';
 import { useAuthStore } from '@/stores';
-import { consultationsApi, queryKeys } from '@/lib/api';
+import { consultationApi, queryKeys } from '@/lib/api';
 import { cn, formatDate, formatTime } from '@/lib/utils';
-import type { Consultation } from '@/types';
+import type { Consultation, ConsultationStatus, ConsultationType } from '@/types';
 
 // ============================================
 // Animation Variants
@@ -56,20 +56,21 @@ interface ConsultationCardProps {
 }
 
 function ConsultationCard({ consultation }: ConsultationCardProps) {
-  const statusColors = {
+  const statusColors: Record<ConsultationStatus, string> = {
     pending: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
     confirmed: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
     in_progress: 'bg-green-500/10 text-green-600 border-green-500/20',
     completed: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
     cancelled: 'bg-red-500/10 text-red-600 border-red-500/20',
+    no_show: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
   };
 
-  const lawyerName = consultation.lawyer 
-    ? `Adv. ${consultation.lawyer.firstName} ${consultation.lawyer.lastName}`
+  const lawyerName = consultation.lawyer?.user 
+    ? `Adv. ${consultation.lawyer.user.firstName} ${consultation.lawyer.user.lastName}`
     : 'Unknown Lawyer';
   
-  const lawyerInitials = consultation.lawyer
-    ? `${consultation.lawyer.firstName?.[0] || ''}${consultation.lawyer.lastName?.[0] || ''}`.toUpperCase()
+  const lawyerInitials = consultation.lawyer?.user
+    ? `${consultation.lawyer.user.firstName?.[0] || ''}${consultation.lawyer.user.lastName?.[0] || ''}`.toUpperCase()
     : 'UN';
 
   return (
@@ -85,7 +86,7 @@ function ConsultationCard({ consultation }: ConsultationCardProps) {
               <div>
                 <h4 className="font-medium truncate">{lawyerName}</h4>
                 <p className="text-sm text-muted-foreground truncate">
-                  {consultation.practiceArea}
+                  {consultation.practiceArea?.name || 'General'}
                 </p>
               </div>
               <Badge
@@ -184,25 +185,34 @@ export function ClientDashboard() {
   // Fetch upcoming consultations
   const { data: consultationsData, isLoading: consultationsLoading } = useQuery({
     queryKey: queryKeys.consultations.list({ status: 'confirmed', limit: 5 }),
-    queryFn: () => consultationsApi.getConsultations({ 
-      status: 'confirmed', 
-      page: 1, 
-      limit: 5 
-    }),
+    queryFn: async () => {
+      const response = await consultationApi.list({ 
+        status: 'confirmed', 
+        page: 1, 
+        limit: 5 
+      });
+      return response.data;
+    },
   });
 
   // Fetch consultation stats
   const { data: statsData } = useQuery({
     queryKey: queryKeys.consultations.stats(),
-    queryFn: () => consultationsApi.getConsultationStats(),
+    queryFn: async () => {
+      const response = await consultationApi.getStats();
+      return response.data;
+    },
   });
 
   const upcomingConsultations = consultationsData?.consultations || [];
   const stats = statsData || {
     total: 0,
     pending: 0,
+    confirmed: 0,
     completed: 0,
-    upcoming: 0,
+    cancelled: 0,
+    byType: {} as Record<ConsultationType, number>,
+    byStatus: {} as Record<ConsultationStatus, number>,
   };
 
   const greeting = getGreeting();
@@ -234,15 +244,14 @@ export function ClientDashboard() {
         />
         <StatCard
           title="Upcoming"
-          value={stats.upcoming}
+          value={stats.confirmed}
           icon={<Clock className="h-5 w-5" />}
-          description="Next 7 days"
+          description="Confirmed consultations"
         />
         <StatCard
           title="Pending"
           value={stats.pending}
           icon={<AlertCircle className="h-5 w-5" />}
-          variant={stats.pending > 0 ? 'warning' : 'default'}
         />
         <StatCard
           title="Completed"

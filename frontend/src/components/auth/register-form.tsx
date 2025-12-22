@@ -18,7 +18,8 @@ import {
   Check,
   X 
 } from 'lucide-react';
-import { useAuth, registerSchema, type RegisterFormData } from '@/hooks';
+import { useAuth, registerSchema } from '@/hooks';
+import type { RegisterFormData } from '@/types';
 import {
   Button,
   Input,
@@ -136,6 +137,7 @@ export function RegisterForm({ className, onSuccess }: RegisterFormProps) {
       phone: '',
       password: '',
       confirmPassword: '',
+      role: 'user',
       acceptTerms: false,
     },
   });
@@ -144,13 +146,7 @@ export function RegisterForm({ className, onSuccess }: RegisterFormProps) {
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      await registerMutation.mutateAsync({
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        phone: data.phone,
-        password: data.password,
-      });
+      await registerMutation.mutateAsync(data);
       onSuccess?.();
     } catch (error) {
       // Error is handled by the mutation
