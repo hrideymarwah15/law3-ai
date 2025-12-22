@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores';
 import { Spinner } from '@/components/ui';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 // ============================================
 // Loading Screen Component
@@ -55,7 +55,6 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user, tokens, isAuthenticated, isLoading } = useAuthStore();
   const [isChecking, setIsChecking] = useState(true);
 
@@ -105,20 +104,20 @@ export function ProtectedRoute({
 }
 
 // ============================================
-// Guest Route HOC (for login/register pages)
+// Guest Route Inner Component (uses searchParams)
 // ============================================
 
-interface GuestRouteProps {
+interface GuestRouteInnerProps {
   children: React.ReactNode;
   redirectTo?: string;
   fallback?: React.ReactNode;
 }
 
-export function GuestRoute({
+function GuestRouteInner({
   children,
   redirectTo,
   fallback,
-}: GuestRouteProps) {
+}: GuestRouteInnerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading } = useAuthStore();
@@ -154,6 +153,24 @@ export function GuestRoute({
   }
 
   return <>{children}</>;
+}
+
+// ============================================
+// Guest Route HOC (wrapped with Suspense)
+// ============================================
+
+interface GuestRouteProps {
+  children: React.ReactNode;
+  redirectTo?: string;
+  fallback?: React.ReactNode;
+}
+
+export function GuestRoute(props: GuestRouteProps) {
+  return (
+    <Suspense fallback={props.fallback || <AuthLoadingScreen />}>
+      <GuestRouteInner {...props} />
+    </Suspense>
+  );
 }
 
 // ============================================

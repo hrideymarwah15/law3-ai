@@ -29,7 +29,7 @@ export interface VerifyPaymentData {
 }
 
 export const paymentApi = {
-  // List payments
+  // List payments - may not exist in current backend, using consultations endpoint
   list: (params?: {
     page?: number;
     limit?: number;
@@ -37,21 +37,27 @@ export const paymentApi = {
     startDate?: string;
     endDate?: string;
   }) =>
-    api.get<ApiResponse<PaymentListResponse>>("/payments", { params }),
-
-  // Get payment by ID
-  getById: (id: string) =>
-    api.get<ApiResponse<Payment>>(`/payments/${id}`),
-
-  // Create order for consultation
-  createOrder: (consultationId: string) =>
-    api.post<ApiResponse<CreateOrderResponse>>("/payments/create-order", {
-      consultationId,
+    api.get<ApiResponse<PaymentListResponse>>("/consultations/my-consultations", { 
+      params: { ...params, include_payments: true } 
     }),
 
-  // Verify payment
+  // Get payment by ID - may need consultation ID instead
+  getById: (id: string) =>
+    api.get<ApiResponse<Payment>>(`/consultations/${id}`),
+
+  // Create order for consultation (handled via book endpoint)
+  createOrder: (consultationId: string) =>
+    api.post<ApiResponse<CreateOrderResponse>>("/consultations/book", {
+      consultation_id: consultationId,
+    }),
+
+  // Verify/Confirm payment (backend uses /consultations/:id/confirm-payment)
   verifyPayment: (data: VerifyPaymentData & { consultationId: string }) =>
-    api.post<ApiResponse<Payment>>("/payments/verify", data),
+    api.post<ApiResponse<Payment>>(`/consultations/${data.consultationId}/confirm-payment`, {
+      razorpay_order_id: data.razorpay_order_id,
+      razorpay_payment_id: data.razorpay_payment_id,
+      razorpay_signature: data.razorpay_signature,
+    }),
 
   // Get payment for consultation
   getByConsultation: (consultationId: string) =>

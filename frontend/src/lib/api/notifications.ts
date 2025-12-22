@@ -14,41 +14,46 @@ export const notificationApi = {
   // Get all notifications
   list: (params?: { page?: number; limit?: number; unreadOnly?: boolean }) =>
     api.get<ApiResponse<NotificationListResponse>>("/notifications", {
-      params,
+      params: { 
+        ...params, 
+        unread_only: params?.unreadOnly 
+      },
     }),
 
-  // Get notification by ID
+  // Get notification by ID (backend uses notification_id param)
   getById: (id: string) =>
     api.get<ApiResponse<Notification>>(`/notifications/${id}`),
 
-  // Mark notification as read
+  // Mark notification as read (backend uses PUT not PATCH)
   markAsRead: (id: string) =>
-    api.patch<ApiResponse<Notification>>(`/notifications/${id}/read`),
+    api.put<ApiResponse<Notification>>(`/notifications/${id}/read`),
 
-  // Mark all as read
+  // Mark all as read (backend uses PUT not POST)
   markAllAsRead: () =>
-    api.post<ApiResponse<{ count: number }>>("/notifications/read-all"),
+    api.put<ApiResponse<{ count: number }>>("/notifications/read-all"),
 
   // Delete notification
   delete: (id: string) =>
     api.delete<ApiResponse<{ message: string }>>(`/notifications/${id}`),
 
-  // Delete all notifications
-  deleteAll: () =>
-    api.delete<ApiResponse<{ count: number }>>("/notifications/all"),
+  // Delete multiple notifications (backend uses different endpoint)
+  deleteMultiple: (ids: string[]) =>
+    api.delete<ApiResponse<{ count: number }>>("/notifications/delete-multiple", {
+      data: { notification_ids: ids }
+    }),
 
   // Get unread count
   getUnreadCount: () =>
     api.get<ApiResponse<{ count: number }>>("/notifications/unread-count"),
 
-  // Update notification preferences
+  // Update notification preferences (backend uses PUT not PATCH)
   updatePreferences: (data: {
     email?: boolean;
     push?: boolean;
     sms?: boolean;
     types?: Record<string, boolean>;
   }) =>
-    api.patch<ApiResponse<{ message: string }>>(
+    api.put<ApiResponse<{ message: string }>>(
       "/notifications/preferences",
       data
     ),

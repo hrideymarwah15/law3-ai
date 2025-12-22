@@ -15,14 +15,14 @@ export const config = {
 
   // API Configuration
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api",
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api/v1",
     timeout: 30000, // 30 seconds
     retries: 3,
   },
 
   // Socket Configuration
   socket: {
-    url: process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001",
+    url: process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000",
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
   },

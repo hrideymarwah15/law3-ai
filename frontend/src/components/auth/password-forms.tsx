@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -173,7 +173,7 @@ interface ResetPasswordFormProps {
   className?: string;
 }
 
-export function ResetPasswordForm({ className }: ResetPasswordFormProps) {
+function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -335,5 +335,23 @@ export function ResetPasswordForm({ className }: ResetPasswordFormProps) {
         </Link>
       </p>
     </div>
+  );
+}
+
+// ============================================
+// Exported Reset Password Form with Suspense
+// ============================================
+
+export function ResetPasswordForm(props: ResetPasswordFormProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full flex items-center justify-center py-12">
+          <Spinner size="lg" />
+        </div>
+      }
+    >
+      <ResetPasswordFormInner {...props} />
+    </Suspense>
   );
 }

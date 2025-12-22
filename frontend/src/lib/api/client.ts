@@ -122,22 +122,22 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const response = await axios.post<RefreshTokenResponse>(
+        const response = await axios.post<{ success: boolean; session: { access_token: string; refresh_token: string; expires_at: number } }>(
           `${config.api.baseUrl}/auth/refresh`,
-          { refreshToken: tokens.refreshToken }
+          { refresh_token: tokens.refreshToken }
         );
 
-        const { accessToken, refreshToken, expiresIn } = response.data;
+        const { access_token, refresh_token, expires_at } = response.data.session;
         const newTokens = {
-          accessToken,
-          refreshToken,
-          expiresAt: Date.now() + expiresIn * 1000,
+          accessToken: access_token,
+          refreshToken: refresh_token,
+          expiresAt: expires_at * 1000,
         };
 
         useAuthStore.getState().setTokens(newTokens);
-        processQueue(null, accessToken);
+        processQueue(null, access_token);
 
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError as Error, null);

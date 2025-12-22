@@ -20,15 +20,21 @@ export const chatApi = {
   getRooms: (params?: { page?: number; limit?: number }) =>
     api.get<ApiResponse<ChatRoomListResponse>>("/chat/rooms", { params }),
 
-  // Get chat room by ID
+  // Get chat room by ID (backend uses room_id param)
   getRoomById: (id: string) =>
     api.get<ApiResponse<ChatRoom>>(`/chat/rooms/${id}`),
 
-  // Get or create room for consultation
+  // Get or create room for consultation (backend is POST /chat/rooms)
   getOrCreateRoom: (consultationId: string) =>
-    api.post<ApiResponse<ChatRoom>>(`/chat/rooms/consultation/${consultationId}`),
+    api.post<ApiResponse<ChatRoom>>("/chat/rooms", {
+      consultation_id: consultationId,
+    }),
 
-  // Get messages for a room
+  // Get room by consultation ID
+  getRoomByConsultation: (consultationId: string) =>
+    api.get<ApiResponse<ChatRoom>>(`/chat/consultation/${consultationId}`),
+
+  // Get messages for a room (backend uses room_id param)
   getMessages: (
     roomId: string,
     params?: { page?: number; limit?: number; before?: string }

@@ -100,7 +100,11 @@ function HeroSection() {
                   className="w-full h-14 pl-12 pr-4 rounded-xl border border-input bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-base"
                 />
               </div>
-              <Button size="lg" className="h-14 px-8">
+              <Button 
+                size="lg" 
+                className="h-14 px-8"
+                style={{ background: '#4F46E5', color: '#ffffff' }}
+              >
                 Find a Lawyer
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -200,7 +204,7 @@ function PracticeAreasSection() {
 
           <motion.div variants={fadeInUp} className="text-center mt-8">
             <Button variant="outline" asChild>
-              <Link href="/practice-areas">
+              <Link href="/practice-areas" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600, padding: '0 1rem', height: '2.75rem', borderRadius: '0.5rem' }}>
                 View All Practice Areas
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
@@ -283,7 +287,7 @@ function HowItWorksSection() {
 
           <motion.div variants={fadeInUp} className="text-center mt-12">
             <Button size="lg" asChild>
-              <Link href="/lawyers">
+              <Link href="/lawyers" style={{ background: '#4F46E5', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 600, padding: '0 1.5rem', height: '3rem', borderRadius: '0.5rem' }}>
                 Get Started Now
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -360,7 +364,7 @@ function FeaturedLawyersSection() {
               </p>
             </div>
             <Button variant="outline" asChild className="hidden md:flex">
-              <Link href="/lawyers">
+              <Link href="/lawyers" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600, padding: '0 1rem', height: '2.75rem', borderRadius: '0.5rem' }}>
                 View All Lawyers
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
@@ -406,7 +410,7 @@ function FeaturedLawyersSection() {
 
           <motion.div variants={fadeInUp} className="text-center mt-8 md:hidden">
             <Button variant="outline" asChild>
-              <Link href="/lawyers">
+              <Link href="/lawyers" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600, padding: '0 1rem', height: '2.75rem', borderRadius: '0.5rem' }}>
                 View All Lawyers
                 <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
@@ -585,13 +589,13 @@ function CTASection() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" asChild>
-                  <Link href="/lawyers">
+                  <Link href="/lawyers" style={{ background: '#4F46E5', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 600, padding: '0 1.5rem', height: '3rem', borderRadius: '0.5rem' }}>
                     Find a Lawyer
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
-                  <Link href="/lawyer/register">
+                  <Link href="/lawyer/register" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 600, padding: '0 1.5rem', height: '3rem', borderRadius: '0.5rem' }}>
                     Register as Lawyer
                   </Link>
                 </Button>

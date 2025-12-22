@@ -78,7 +78,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-neutral-200 bg-white/80 backdrop-blur-lg">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/80 backdrop-blur-lg">
       <div className="container-wide">
         <div className="flex h-16 items-center justify-between gap-4 lg:h-18">
           {/* Logo */}
@@ -87,10 +87,10 @@ export function Header() {
               <Scale className="h-5 w-5" />
             </div>
             <div className="hidden sm:block">
-              <span className="text-lg font-bold text-neutral-900">
+              <span className="text-lg font-bold text-slate-900">
                 {config.app.name}
               </span>
-              <span className="ml-1 text-xs text-neutral-500 hidden md:inline">
+              <span className="ml-1 text-xs text-slate-500 hidden md:inline">
                 न्याय सबके लिए
               </span>
             </div>
@@ -108,7 +108,7 @@ export function Header() {
                     "px-4 py-2 text-sm font-medium rounded-lg transition-colors",
                     isActive
                       ? "text-primary-600 bg-primary-50"
-                      : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   )}
                 >
                   {link.label}
@@ -163,21 +163,21 @@ export function Header() {
                 {/* User Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 rounded-full p-1 hover:bg-neutral-100 transition-colors">
+                    <button className="flex items-center gap-2 rounded-full p-1 hover:bg-slate-100 transition-colors">
                       <Avatar
                         src={user?.avatar}
                         alt={user?.fullName}
                         fallback={user?.fullName}
                         size="sm"
                       />
-                      <ChevronDown className="h-4 w-4 text-neutral-500 hidden sm:block" />
+                      <ChevronDown className="h-4 w-4 text-slate-500 hidden sm:block" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <DropdownMenuLabel>
                       <div className="flex flex-col">
                         <span className="font-semibold">{user?.fullName}</span>
-                        <span className="text-xs text-neutral-500 font-normal">
+                        <span className="text-xs text-slate-500 font-normal">
                           {user?.email}
                         </span>
                       </div>
@@ -212,7 +212,7 @@ export function Header() {
                   <Button variant="ghost">Login</Button>
                 </Link>
                 <Link href="/register">
-                  <Button>Get Started</Button>
+                  <Button style={{ background: '#4F46E5', color: '#ffffff' }}>Get Started</Button>
                 </Link>
               </>
             )}
@@ -243,7 +243,7 @@ export function Header() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="lg:hidden border-t border-neutral-200 bg-white overflow-hidden"
+            className="lg:hidden border-t border-slate-200 bg-white overflow-hidden"
           >
             <nav className="container-wide py-4 space-y-1">
               {navLinks.map((link) => {
@@ -257,7 +257,7 @@ export function Header() {
                       "block px-4 py-3 text-base font-medium rounded-lg transition-colors",
                       isActive
                         ? "text-primary-600 bg-primary-50"
-                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                     )}
                   >
                     {link.label}
@@ -271,7 +271,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="block"
                   >
-                    <Button variant="outline" fullWidth>
+                    <Button variant="outline" fullWidth style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5' }}>
                       Login
                     </Button>
                   </Link>
@@ -280,7 +280,7 @@ export function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="block"
                   >
-                    <Button fullWidth>Get Started</Button>
+                    <Button fullWidth style={{ background: '#4F46E5', color: '#ffffff' }}>Get Started</Button>
                   </Link>
                 </div>
               )}

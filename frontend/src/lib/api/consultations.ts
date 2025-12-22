@@ -31,45 +31,49 @@ export interface ConsultationFilters {
 }
 
 export const consultationApi = {
-  // List consultations
+  // List consultations (backend uses /my-consultations)
   list: (params?: ConsultationFilters) =>
-    api.get<ApiResponse<ConsultationListResponse>>("/consultations", {
+    api.get<ApiResponse<ConsultationListResponse>>("/consultations/my-consultations", {
       params,
     }),
 
-  // Get consultation by ID
+  // Get consultation by ID (backend uses :consultation_id)
   getById: (id: string) =>
     api.get<ApiResponse<Consultation>>(`/consultations/${id}`),
 
-  // Get upcoming consultations
+  // Get upcoming consultations (backend uses /upcoming-video)
   getUpcoming: () =>
     api.get<ApiResponse<{ consultations: Consultation[] }>>(
-      "/consultations/upcoming"
+      "/consultations/upcoming-video"
     ),
 
   // Get consultation history
   getHistory: (params?: { page?: number; limit?: number }) =>
-    api.get<ApiResponse<ConsultationListResponse>>("/consultations/history", {
-      params,
+    api.get<ApiResponse<ConsultationListResponse>>("/consultations/my-consultations", {
+      params: { ...params, status: 'completed' },
     }),
 
-  // Book consultation
+  // Book consultation (backend uses /book)
   book: (data: BookConsultationFormData) =>
-    api.post<ApiResponse<Consultation>>("/consultations", data),
+    api.post<ApiResponse<Consultation>>("/consultations/book", data),
 
   // Update consultation
   update: (id: string, data: Partial<Consultation>) =>
     api.patch<ApiResponse<Consultation>>(`/consultations/${id}`, data),
 
-  // Cancel consultation
+  // Cancel consultation (backend uses PUT)
   cancel: (id: string, reason?: string) =>
-    api.post<ApiResponse<Consultation>>(`/consultations/${id}/cancel`, {
-      reason,
+    api.put<ApiResponse<Consultation>>(`/consultations/${id}/cancel`, {
+      cancellation_reason: reason,
     }),
 
-  // Reschedule consultation
+  // Reschedule consultation (backend uses PUT)
   reschedule: (id: string, data: { date: string; time: string }) =>
-    api.post<ApiResponse<Consultation>>(`/consultations/${id}/reschedule`, data),
+    api.put<ApiResponse<Consultation>>(`/consultations/${id}/reschedule`, {
+      new_date: data.date,
+      new_start_time: data.time,
+      reschedule_reason: 'Schedule change requested',
+    }),
 
   // Confirm consultation (lawyer)
   confirm: (id: string) =>

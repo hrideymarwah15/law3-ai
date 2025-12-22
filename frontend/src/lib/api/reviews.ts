@@ -2,12 +2,72 @@ import { api } from "./client";
 import type { ApiResponse, Review, Pagination } from "@/types";
 
 // ============================================
+// Backend Review Types
+// ============================================
+
+// What the backend actually returns for reviews
+export interface BackendReview {
+  id: string;
+  user_name: string;
+  rating: number;
+  review_text: string | null;
+  created_at: string;
+  is_verified: boolean;
+}
+
+// Backend response for reviews list
+export interface BackendReviewsResponse {
+  success: boolean;
+  total: number;
+  average_rating: number;
+  reviews: BackendReview[];
+}
+
+// Transform backend review to frontend Review type
+export function transformReview(backendReview: BackendReview): Review {
+  const firstName = backendReview.user_name.split(' ')[0] || backendReview.user_name;
+  const lastName = backendReview.user_name.split(' ').slice(1).join(' ') || '';
+  
+  return {
+    id: backendReview.id,
+    consultationId: '', // Not provided in list response
+    userId: '', // Not provided in list response
+    user: {
+      id: '',
+      firstName,
+      lastName,
+      email: '',
+      fullName: backendReview.user_name,
+      avatar: undefined,
+      role: 'user',
+      isVerified: false,
+      isActive: true,
+      preferredLanguage: 'en',
+      createdAt: backendReview.created_at,
+      updatedAt: backendReview.created_at,
+    },
+    lawyerId: '',
+    rating: backendReview.rating,
+    title: undefined,
+    comment: backendReview.review_text || undefined,
+    isAnonymous: backendReview.user_name === 'Anonymous',
+    isVerified: backendReview.is_verified,
+    helpfulCount: 0,
+    lawyerResponse: undefined,
+    createdAt: backendReview.created_at,
+    updatedAt: backendReview.created_at,
+  };
+}
+
+// ============================================
 // Review API Service
 // ============================================
 
 export interface ReviewListResponse {
   reviews: Review[];
   pagination: Pagination;
+  averageRating?: number;
+  total?: number;
 }
 
 export interface CreateReviewData {
@@ -19,15 +79,20 @@ export interface CreateReviewData {
 }
 
 export const reviewApi = {
-  // List reviews
+  // List reviews for a lawyer - backend expects /reviews/lawyer/:lawyer_id
   list: (params?: {
     page?: number;
     limit?: number;
     lawyerId?: string;
     rating?: number;
     sortBy?: "recent" | "rating_high" | "rating_low" | "helpful";
-  }) =>
-    api.get<ApiResponse<ReviewListResponse>>("/reviews", { params }),
+  }) => {
+    const { lawyerId, ...queryParams } = params || {};
+    if (lawyerId) {
+      return api.get<ApiResponse<ReviewListResponse>>(`/reviews/lawyer/${lawyerId}`, { params: queryParams });
+    }
+    return api.get<ApiResponse<ReviewListResponse>>("/reviews", { params: queryParams });
+  },
 
   // Get review by ID
   getById: (id: string) =>

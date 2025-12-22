@@ -4,6 +4,7 @@
 
 export { LoginForm, TwoFactorForm } from './login-form';
 export { RegisterForm } from './register-form';
+export { LawyerRegisterForm } from './lawyer-register-form';
 export { ForgotPasswordForm, ResetPasswordForm } from './password-forms';
 export {
   ProtectedRoute,

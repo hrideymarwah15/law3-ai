@@ -26,14 +26,29 @@ export default function RegisterPage() {
         <div className="min-h-screen flex">
           {/* Left Panel - Image/Features */}
           <div className="relative hidden w-0 flex-1 lg:block">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary-800">
-              <div className="absolute inset-0 bg-[url('/patterns/grid.svg')] opacity-20" />
-              <div className="relative h-full flex flex-col justify-center px-16">
+            <div 
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #6366F1 100%)'
+              }}
+            >
+              {/* Decorative pattern overlay */}
+              <div 
+                className="absolute inset-0 opacity-10"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+                }}
+              />
+              {/* Decorative elements */}
+              <div className="absolute top-20 left-20 w-64 h-64 rounded-full blur-3xl" style={{ background: 'rgba(255,255,255,0.1)' }} />
+              <div className="absolute bottom-32 right-16 w-80 h-80 rounded-full blur-3xl" style={{ background: 'rgba(139,92,246,0.3)' }} />
+              
+              <div className="relative h-full flex flex-col justify-center px-12 xl:px-16">
                 <div className="max-w-lg">
-                  <h2 className="text-3xl font-bold text-white mb-4">
+                  <h2 className="text-3xl xl:text-4xl font-bold mb-4" style={{ color: '#ffffff' }}>
                     Your Legal Journey Starts Here
                   </h2>
-                  <p className="text-white/80 text-lg mb-12">
+                  <p className="text-lg mb-12" style={{ color: 'rgba(255,255,255,0.85)' }}>
                     Join thousands of users who trust Nyaay Saathi for their legal needs.
                   </p>
 
@@ -57,18 +72,18 @@ export default function RegisterPage() {
                   </div>
 
                   {/* Testimonial */}
-                  <div className="mt-16 p-6 rounded-2xl bg-white/10 backdrop-blur">
-                    <p className="text-white/90 italic">
+                  <div className="mt-16 p-6 rounded-2xl backdrop-blur-sm" style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                    <p className="italic" style={{ color: 'rgba(255,255,255,0.95)' }}>
                       &ldquo;Nyaay Saathi helped me find the right lawyer for my property dispute. 
                       The process was smooth and the consultation was very helpful.&rdquo;
                     </p>
                     <div className="mt-4 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                        <span className="text-white font-semibold">RK</span>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                        <span className="font-semibold" style={{ color: '#ffffff' }}>RK</span>
                       </div>
                       <div>
-                        <p className="text-white font-medium">Rahul Kumar</p>
-                        <p className="text-white/60 text-sm">Verified Client</p>
+                        <p className="font-medium" style={{ color: '#ffffff' }}>Rahul Kumar</p>
+                        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>Verified Client</p>
                       </div>
                     </div>
                   </div>
@@ -123,12 +138,15 @@ interface FeatureItemProps {
 function FeatureItem({ icon, title, description }: FeatureItemProps) {
   return (
     <div className="flex gap-4">
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-white">
+      <div 
+        className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+        style={{ background: 'rgba(255,255,255,0.2)', color: '#ffffff' }}
+      >
         {icon}
       </div>
       <div>
-        <h3 className="text-white font-semibold">{title}</h3>
-        <p className="text-white/70 text-sm">{description}</p>
+        <h3 className="font-semibold" style={{ color: '#ffffff' }}>{title}</h3>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>{description}</p>
       </div>
     </div>
   );

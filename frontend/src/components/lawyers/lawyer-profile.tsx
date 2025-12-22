@@ -36,7 +36,7 @@ import {
   Skeleton,
   Separator,
 } from '@/components/ui';
-import { lawyerApi, reviewApi, queryKeys } from '@/lib/api';
+import { lawyerApi, reviewApi, queryKeys, transformLawyerDetail, transformReview, BackendReviewsResponse } from '@/lib/api';
 import { cn, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/stores';
 import type { LawyerProfile, Review } from '@/types';
@@ -128,11 +128,15 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Fetch lawyer profile
-  const { data: lawyer, isLoading: lawyerLoading } = useQuery({
+  const { data: lawyer, isLoading: lawyerLoading, error: lawyerError } = useQuery({
     queryKey: queryKeys.lawyers.detail(lawyerId),
     queryFn: async () => {
       const response = await lawyerApi.getById(lawyerId);
-      return response.data;
+      // Backend returns { success, lawyer } - transform to frontend format
+      if (response.success && response.lawyer) {
+        return transformLawyerDetail(response.lawyer);
+      }
+      return null;
     },
   });
 
@@ -140,8 +144,16 @@ export function LawyerProfilePage({ lawyerId }: LawyerProfilePageProps) {
   const { data: reviewsData, isLoading: reviewsLoading } = useQuery({
     queryKey: queryKeys.reviews.list({ lawyerId }),
     queryFn: async () => {
-      const response = await reviewApi.list({ lawyerId, page: 1, limit: 10 });
-      return response.data;
+      // Backend returns { success, total, average_rating, reviews: BackendReview[] } directly
+      const response = await reviewApi.list({ lawyerId, page: 1, limit: 10 }) as unknown as BackendReviewsResponse;
+      if (response.success && response.reviews) {
+        return {
+          reviews: response.reviews.map(transformReview),
+          averageRating: response.average_rating,
+          total: response.total,
+        };
+      }
+      return { reviews: [], averageRating: 0, total: 0 };
     },
     enabled: activeTab === 'reviews',
   });

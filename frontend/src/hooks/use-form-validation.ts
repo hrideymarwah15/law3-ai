@@ -24,7 +24,20 @@ export const phoneSchema = z
   .string()
   .min(10, 'Phone number must be at least 10 digits')
   .max(15, 'Phone number must not exceed 15 digits')
-  .regex(/^\+?[0-9]+$/, 'Please enter a valid phone number');
+  .transform((val) => {
+    // Auto-format to +91 prefix for Indian numbers
+    const digits = val.replace(/\D/g, '');
+    if (digits.startsWith('91') && digits.length === 12) {
+      return '+' + digits;
+    }
+    if (digits.length === 10 && /^[6-9]/.test(digits)) {
+      return '+91' + digits;
+    }
+    return val;
+  })
+  .refine((val) => /^\+91[6-9]\d{9}$/.test(val), {
+    message: 'Please enter a valid Indian phone number (10 digits starting with 6-9)',
+  });
 
 export const nameSchema = z
   .string()

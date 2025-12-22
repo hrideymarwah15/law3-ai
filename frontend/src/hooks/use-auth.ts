@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores';
 import { authApi, queryKeys, invalidateQueries } from '@/lib/api';
+import { lawyerApi } from '@/lib/api/lawyer';
 import type { 
   LoginFormData, 
   RegisterFormData,
@@ -68,13 +69,55 @@ export function useAuth() {
       const response = await authApi.login(credentials);
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setTokens({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         expiresAt: Date.now() + data.expiresIn * 1000,
       });
       setUser(data.user);
+      
+      // Check for pending lawyer registration and submit it
+      try {
+        const pendingData = typeof window !== 'undefined' 
+          ? sessionStorage.getItem('pendingLawyerRegistration') 
+          : null;
+        
+        if (pendingData) {
+          const lawyerData = JSON.parse(pendingData);
+          
+          // Transform frontend form data to backend format
+          const registrationPayload = {
+            bar_council_number: lawyerData.barCouncilNumber,
+            bar_council_state: lawyerData.barCouncilState,
+            bar_council_enrollment_date: lawyerData.barCouncilEnrollmentDate || undefined,
+            specialization: lawyerData.specialization,
+            experience_years: lawyerData.experienceYears,
+            bio: lawyerData.bio,
+            headline: lawyerData.headline || undefined,
+            consultation_fee: lawyerData.consultationFee,
+            office_city: lawyerData.officeCity,
+            office_state: lawyerData.officeState,
+            office_address: lawyerData.officeAddress || undefined,
+            office_pincode: lawyerData.officePincode || undefined,
+            education: lawyerData.education,
+            languages_spoken: lawyerData.languagesSpoken,
+            practice_areas: lawyerData.practiceAreas,
+            courts_practiced: lawyerData.courtsPracticed || [],
+            bar_council_certificate_url: lawyerData.barCouncilCertificateUrl,
+            id_proof_type: lawyerData.idProofType,
+            id_proof_url: lawyerData.idProofUrl,
+            profile_photo_url: lawyerData.profilePhotoUrl || undefined,
+          };
+
+          await lawyerApi.submitRegistration(registrationPayload);
+          sessionStorage.removeItem('pendingLawyerRegistration');
+          console.log('Pending lawyer registration submitted successfully');
+        }
+      } catch (err) {
+        console.error('Failed to submit pending lawyer registration:', err);
+        // Don't fail login, user can try submitting again
+      }
       
       // Redirect based on role
       const redirectPath = getDefaultRoute(data.user.role);

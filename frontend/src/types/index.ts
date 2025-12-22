@@ -154,6 +154,13 @@ export interface TimeSlot {
 }
 
 export interface LawyerSearchFilters {
+  // Backend parameter names
+  specialization?: string;
+  city?: string;
+  min_price?: number;
+  max_price?: number;
+  min_rating?: number;
+  // Keep these for frontend filtering
   practiceArea?: string;
   location?: string;
   language?: string;

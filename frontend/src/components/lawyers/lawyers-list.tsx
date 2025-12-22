@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ import {
   Skeleton,
   Separator,
 } from '@/components/ui';
-import { lawyerApi, queryKeys } from '@/lib/api';
+import { lawyerApi, queryKeys, transformLawyer } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { config } from '@/config';
 import type { LawyerProfile } from '@/types';
@@ -44,6 +44,8 @@ import type { LawyerProfile } from '@/types';
 // ============================================
 // Types
 // ============================================
+
+type SortBy = "rating" | "experience" | "fee_low" | "fee_high" | "reviews";
 
 interface FiltersState {
   search: string;
@@ -53,7 +55,7 @@ interface FiltersState {
   maxFee: number;
   languages: string[];
   availability: string;
-  sortBy: string;
+  sortBy: SortBy;
   consultationType: string[];
 }
 
@@ -150,14 +152,14 @@ function FilterSidebar({ filters, onFilterChange, onClearFilters, isOpen, onClos
           <div className="space-y-3">
             <h4 className="font-medium">Location</h4>
             <Select
-              value={filters.location}
-              onValueChange={(value) => onFilterChange('location', value)}
+              value={filters.location || 'all'}
+              onValueChange={(value) => onFilterChange('location', value === 'all' ? '' : value)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All Locations" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Locations</SelectItem>
+                <SelectItem value="all">All Locations</SelectItem>
                 {config.states.map((state) => (
                   <SelectItem key={state} value={state}>
                     {state}
@@ -268,7 +270,7 @@ interface LawyerCardProps {
 }
 
 function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
-  const initials = `${lawyer.firstName?.[0] || ''}${lawyer.lastName?.[0] || ''}`.toUpperCase();
+  const initials = `${lawyer.user?.firstName?.[0] || ''}${lawyer.user?.lastName?.[0] || ''}`.toUpperCase();
 
   if (viewMode === 'list') {
     return (
@@ -277,16 +279,16 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
           <div className="flex gap-6">
             <Avatar
               size="xl"
-              src={lawyer.profilePhoto || undefined}
+              src={lawyer.user?.avatar || undefined}
               fallback={initials}
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-semibold">
-                    Adv. {lawyer.firstName} {lawyer.lastName}
+                    Adv. {lawyer.user?.firstName} {lawyer.user?.lastName}
                   </h3>
-                  <p className="text-muted-foreground">{lawyer.practiceAreas?.[0]}</p>
+                  <p className="text-muted-foreground">{lawyer.practiceAreas?.[0]?.name}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-bold text-primary">₹{lawyer.consultationFee}</p>
@@ -305,14 +307,14 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
                 </span>
                 <span className="flex items-center gap-1">
                   <MapPin className="h-4 w-4" />
-                  {lawyer.city}, {lawyer.state}
+                  {lawyer.barCouncilState}
                 </span>
               </div>
 
               <div className="flex flex-wrap gap-2 mt-3">
                 {lawyer.practiceAreas?.slice(0, 4).map((area) => (
-                  <Badge key={area} variant="secondary" size="sm">
-                    {area}
+                  <Badge key={area.id} variant="secondary" size="sm">
+                    {area.name}
                   </Badge>
                 ))}
                 {(lawyer.practiceAreas?.length || 0) > 4 && (
@@ -323,20 +325,18 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
               </div>
 
               <div className="flex items-center gap-3 mt-4">
-                {lawyer.isAvailableForVideo && (
-                  <Badge variant="outline" className="gap-1">
-                    <Video className="h-3 w-3" /> Video
-                  </Badge>
-                )}
-                {lawyer.isAvailableForChat && (
-                  <Badge variant="outline" className="gap-1">
-                    <MessageSquare className="h-3 w-3" /> Chat
-                  </Badge>
-                )}
-                {lawyer.isAvailableForCall && (
-                  <Badge variant="outline" className="gap-1">
-                    <Phone className="h-3 w-3" /> Call
-                  </Badge>
+                {lawyer.isAvailable && (
+                  <>
+                    <Badge variant="outline" className="gap-1">
+                      <Video className="h-3 w-3" /> Video
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <MessageSquare className="h-3 w-3" /> Chat
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <Phone className="h-3 w-3" /> Call
+                    </Badge>
+                  </>
                 )}
               </div>
             </div>
@@ -352,15 +352,15 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
         <div className="flex items-start gap-4 mb-4">
           <Avatar
             size="lg"
-            src={lawyer.profilePhoto || undefined}
+            src={lawyer.user?.avatar || undefined}
             fallback={initials}
           />
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold truncate">
-              Adv. {lawyer.firstName} {lawyer.lastName}
+              Adv. {lawyer.user?.firstName} {lawyer.user?.lastName}
             </h3>
             <p className="text-sm text-muted-foreground truncate">
-              {lawyer.practiceAreas?.[0]}
+              {lawyer.practiceAreas?.[0]?.name}
             </p>
             <div className="flex items-center gap-1 mt-1">
               <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
@@ -379,14 +379,14 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
           </div>
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4" />
-            <span className="truncate">{lawyer.city}, {lawyer.state}</span>
+            <span className="truncate">{lawyer.barCouncilState}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-1 mb-4">
           {lawyer.practiceAreas?.slice(0, 2).map((area) => (
-            <Badge key={area} variant="secondary" size="sm">
-              {area}
+            <Badge key={area.id} variant="secondary" size="sm">
+              {area.name}
             </Badge>
           ))}
         </div>
@@ -399,9 +399,13 @@ function LawyerCard({ lawyer, viewMode }: LawyerCardProps) {
             <p className="text-xs text-muted-foreground">per consultation</p>
           </div>
           <div className="flex gap-1">
-            {lawyer.isAvailableForVideo && <Video className="h-4 w-4 text-muted-foreground" />}
-            {lawyer.isAvailableForChat && <MessageSquare className="h-4 w-4 text-muted-foreground" />}
-            {lawyer.isAvailableForCall && <Phone className="h-4 w-4 text-muted-foreground" />}
+            {lawyer.isAvailable && (
+              <>
+                <Video className="h-4 w-4 text-muted-foreground" />
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <Phone className="h-4 w-4 text-muted-foreground" />
+              </>
+            )}
           </div>
         </div>
       </Card>
@@ -467,7 +471,7 @@ const defaultFilters: FiltersState = {
   consultationType: [],
 };
 
-export function LawyersListPage() {
+function LawyersListPageInner() {
   const searchParams = useSearchParams();
   const initialArea = searchParams.get('area');
   
@@ -481,19 +485,22 @@ export function LawyersListPage() {
 
   // Query lawyers
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.lawyers.list(filters),
+    queryKey: queryKeys.lawyers.list(filters as unknown as Record<string, unknown>),
     queryFn: async () => {
       const response = await lawyerApi.list({
-        practiceArea: filters.practiceAreas?.[0],
-        location: filters.location,
-        minRating: filters.minRating,
-        maxFee: filters.maxFee,
-        language: filters.languages?.[0],
-        sortBy: filters.sortBy,
+        // Map frontend filter names to backend parameter names
+        specialization: filters.practiceAreas?.[0],
+        city: filters.location || undefined,
+        min_rating: filters.minRating || undefined,
+        max_price: filters.maxFee || undefined,
         page: 1,
         limit: 20,
       });
-      return response.data;
+      // Transform backend lawyers to frontend format
+      return {
+        ...response,
+        lawyers: response.lawyers.map(transformLawyer),
+      };
     },
   });
 
@@ -506,7 +513,7 @@ export function LawyersListPage() {
   }, []);
 
   const lawyers = data?.lawyers || [];
-  const totalCount = data?.pagination?.total || 0;
+  const totalCount = data?.total || 0;
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -544,16 +551,19 @@ export function LawyersListPage() {
 
             <Select
               value={filters.sortBy}
-              onValueChange={(value) => handleFilterChange('sortBy', value)}
-              options={[
-                { value: 'rating', label: 'Top Rated' },
-                { value: 'experience', label: 'Most Experienced' },
-                { value: 'fee_low', label: 'Fee: Low to High' },
-                { value: 'fee_high', label: 'Fee: High to Low' },
-                { value: 'reviews', label: 'Most Reviews' },
-              ]}
-              className="w-[180px]"
-            />
+              onValueChange={(value) => handleFilterChange('sortBy', value as SortBy)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rating">Top Rated</SelectItem>
+                <SelectItem value="experience">Most Experienced</SelectItem>
+                <SelectItem value="fee_low">Fee: Low to High</SelectItem>
+                <SelectItem value="fee_high">Fee: High to Low</SelectItem>
+                <SelectItem value="reviews">Most Reviews</SelectItem>
+              </SelectContent>
+            </Select>
 
             <div className="hidden sm:flex border rounded-lg overflow-hidden">
               <Button
@@ -623,13 +633,13 @@ export function LawyersListPage() {
           <div className="flex-1">
             {/* Results Count */}
             <div className="flex items-center justify-between mb-4">
-              <p className="text-muted-foreground">
+              <span className="text-muted-foreground">
                 {isLoading ? (
                   <Skeleton className="h-5 w-32" />
                 ) : (
                   `${totalCount} lawyers found`
                 )}
-              </p>
+              </span>
             </div>
 
             {/* Error State */}
@@ -704,6 +714,28 @@ export function LawyersListPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Exported wrapper with Suspense for useSearchParams
+export function LawyersListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-muted/30">
+          <div className="container py-8">
+            <Skeleton className="h-10 w-64 mb-8" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <Skeleton key={i} className="h-64 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <LawyersListPageInner />
+    </Suspense>
   );
 }
 

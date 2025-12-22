@@ -116,6 +116,13 @@ export const useAuthStore = create<AuthState>()(
         tokens: state.tokens,
         isAuthenticated: state.isAuthenticated,
       }),
+      // After hydration, set isLoading to false
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isLoading = false;
+          state.isInitialized = true;
+        }
+      },
     }
   )
 );

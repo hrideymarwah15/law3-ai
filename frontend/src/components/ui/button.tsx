@@ -23,63 +23,63 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          "bg-primary-600 text-white",
-          "hover:bg-primary-700",
-          "focus-visible:ring-primary-500",
+          "bg-[#4F46E5] text-white",
+          "hover:bg-[#4338CA]",
+          "focus-visible:ring-[#6366F1]",
           "shadow-sm hover:shadow-md",
         ],
         secondary: [
-          "bg-secondary-100 text-secondary-900",
-          "hover:bg-secondary-200",
-          "focus-visible:ring-secondary-500",
+          "bg-[#EDE9FE] text-[#4C1D95]",
+          "hover:bg-[#DDD6FE]",
+          "focus-visible:ring-[#8B5CF6]",
         ],
         outline: [
-          "border-2 border-neutral-300 bg-transparent",
-          "hover:bg-neutral-50 hover:border-neutral-400",
-          "text-neutral-700",
-          "focus-visible:ring-neutral-400",
+          "border-2 border-[#CBD5E1] bg-transparent",
+          "hover:bg-[#F8FAFC] hover:border-[#94A3B8]",
+          "text-[#334155]",
+          "focus-visible:ring-[#94A3B8]",
         ],
         ghost: [
           "bg-transparent",
-          "hover:bg-neutral-100",
-          "text-neutral-700",
-          "focus-visible:ring-neutral-400",
+          "hover:bg-[#F1F5F9]",
+          "text-[#334155]",
+          "focus-visible:ring-[#94A3B8]",
         ],
         link: [
           "bg-transparent underline-offset-4",
           "hover:underline",
-          "text-primary-600",
-          "focus-visible:ring-primary-500",
+          "text-[#4F46E5]",
+          "focus-visible:ring-[#6366F1]",
         ],
         destructive: [
-          "bg-error-600 text-white",
-          "hover:bg-error-700",
-          "focus-visible:ring-error-500",
+          "bg-[#E11D48] text-white",
+          "hover:bg-[#BE123C]",
+          "focus-visible:ring-[#F43F5E]",
           "shadow-sm hover:shadow-md",
         ],
         success: [
-          "bg-success-600 text-white",
-          "hover:bg-success-700",
-          "focus-visible:ring-success-500",
+          "bg-[#059669] text-white",
+          "hover:bg-[#047857]",
+          "focus-visible:ring-[#10B981]",
           "shadow-sm hover:shadow-md",
         ],
         warning: [
-          "bg-warning-500 text-white",
-          "hover:bg-warning-600",
-          "focus-visible:ring-warning-500",
+          "bg-[#F59E0B] text-white",
+          "hover:bg-[#D97706]",
+          "focus-visible:ring-[#F59E0B]",
           "shadow-sm hover:shadow-md",
         ],
         "primary-outline": [
-          "border-2 border-primary-600 bg-transparent",
-          "hover:bg-primary-50",
-          "text-primary-600",
-          "focus-visible:ring-primary-500",
+          "border-2 border-[#4F46E5] bg-transparent",
+          "hover:bg-[#EEF2FF]",
+          "text-[#4F46E5]",
+          "focus-visible:ring-[#6366F1]",
         ],
         "primary-ghost": [
           "bg-transparent",
-          "hover:bg-primary-50",
-          "text-primary-600",
-          "focus-visible:ring-primary-500",
+          "hover:bg-[#EEF2FF]",
+          "text-[#4F46E5]",
+          "focus-visible:ring-[#6366F1]",
         ],
       },
       size: {
@@ -131,6 +131,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const Comp = asChild ? Slot : "button";
     const isDisabled = disabled || isLoading;
+
+    // When asChild is true, we can't add wrapper elements - pass children directly
+    if (asChild) {
+      return (
+        <Comp
+          className={cn(buttonVariants({ variant, size, fullWidth, className }))}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </Comp>
+      );
+    }
 
     return (
       <Comp
