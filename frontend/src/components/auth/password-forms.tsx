@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -24,6 +24,8 @@ import {
   Spinner,
 } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { createClient } from '@supabase/supabase-js';
+import { config } from '@/config';
 
 // ============================================
 // Forgot Password Form
@@ -176,10 +178,12 @@ interface ResetPasswordFormProps {
 function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
-  const { resetPasswordMutation } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isValidSession, setIsValidSession] = useState<boolean | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
@@ -193,8 +197,111 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
     },
   });
 
-  // Handle invalid/missing token
-  if (!token) {
+  // Check for valid recovery session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        setIsCheckingSession(true);
+        
+        // Create a Supabase client
+        const supabase = createClient(
+          config.supabase.url,
+          config.supabase.anonKey
+        );
+
+        // First check URL hash for tokens (Supabase puts them there)
+        const hash = window.location.hash;
+        console.log('Reset password - URL hash:', hash); // Debug
+        console.log('Reset password - Full URL:', window.location.href); // Debug
+        
+        if (hash) {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const type = params.get('type');
+          
+          console.log('Reset password - Type:', type, 'Has tokens:', !!accessToken); // Debug
+          
+          // Check for errors in hash
+          const errorCode = params.get('error_code');
+          const errorDescription = params.get('error_description');
+          
+          if (errorCode) {
+            let errorMessage = errorDescription?.replace(/\+/g, ' ') || 'Invalid reset link';
+            if (errorCode === 'otp_expired') {
+              errorMessage = 'This password reset link has expired. Please request a new one.';
+            }
+            console.log('Reset password - Error:', errorCode, errorMessage); // Debug
+            setSessionError(errorMessage);
+            setIsValidSession(false);
+            setIsCheckingSession(false);
+            return;
+          }
+          
+          if (accessToken && refreshToken && type === 'recovery') {
+            // Set the session from the recovery tokens
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            
+            if (error) {
+              console.error('Failed to set recovery session:', error);
+              setSessionError('This password reset link is invalid or has expired.');
+              setIsValidSession(false);
+            } else {
+              // Clear the hash from URL for cleaner look
+              window.history.replaceState(null, '', window.location.pathname);
+              setIsValidSession(true);
+            }
+            setIsCheckingSession(false);
+            return;
+          }
+        }
+
+        // Check if there's already a valid session (user might have refreshed)
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('Reset password - Existing session:', !!session, error); // Debug
+        
+        if (error) {
+          console.error('Session check error:', error);
+          setSessionError('Failed to verify your session. Please request a new reset link.');
+          setIsValidSession(false);
+        } else if (session) {
+          // Valid session exists
+          setIsValidSession(true);
+        } else {
+          // No session and no hash tokens - invalid access
+          setSessionError('No valid password reset session found. Please request a new reset link.');
+          setIsValidSession(false);
+        }
+        
+        setIsCheckingSession(false);
+      } catch (err) {
+        console.error('Session check failed:', err);
+        setSessionError('An error occurred. Please try requesting a new reset link.');
+        setIsValidSession(false);
+        setIsCheckingSession(false);
+      }
+    };
+
+    checkSession();
+  }, []);
+
+  // Show loading while checking session
+  if (isCheckingSession) {
+    return (
+      <div className={cn('w-full', className)}>
+        <div className="flex flex-col items-center justify-center py-8">
+          <Spinner size="lg" />
+          <p className="mt-4 text-muted-foreground">Verifying reset link...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle invalid/expired session
+  if (!isValidSession) {
     return (
       <div className={cn('w-full', className)}>
         <motion.div
@@ -207,13 +314,16 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
           </div>
           <h2 className="text-2xl font-bold mb-2">Invalid Reset Link</h2>
           <p className="text-muted-foreground mb-6">
-            This password reset link is invalid or has expired.
+            {sessionError || 'This password reset link is invalid or has expired.'}
           </p>
-          <Button asChild className="w-full">
+          <Button asChild className="w-full" style={{ background: '#4F46E5', color: '#fff' }}>
             <Link href="/forgot-password">
               Request New Link
             </Link>
           </Button>
+          <p className="text-xs text-muted-foreground mt-4">
+            Password reset links expire after 1 hour for security.
+          </p>
         </motion.div>
       </div>
     );
@@ -221,13 +331,30 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
 
   const onSubmit = async (data: ResetPasswordFormData) => {
     try {
-      await resetPasswordMutation.mutateAsync({
-        token,
+      setSubmitError(null);
+      
+      // Use Supabase directly to update password since we have an active session
+      const supabase = createClient(
+        config.supabase.url,
+        config.supabase.anonKey
+      );
+
+      const { error } = await supabase.auth.updateUser({
         password: data.password,
       });
-      // Redirect is handled by the auth hook
+
+      if (error) {
+        throw error;
+      }
+
+      // Sign out to clear the recovery session
+      await supabase.auth.signOut();
+      
+      // Redirect to login with success message
+      router.replace('/login?reset=success');
     } catch (error) {
-      // Error is handled by mutation
+      console.error('Password reset error:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to reset password. Please try again.');
     }
   };
 
@@ -242,7 +369,7 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
 
       {/* Error Message */}
       <AnimatePresence mode="wait">
-        {resetPasswordMutation.isError && (
+        {submitError && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -250,7 +377,7 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
             className="mb-6"
           >
             <Alert variant="error" icon={<AlertCircle className="h-4 w-4" />}>
-              {(resetPasswordMutation.error as Error)?.message || 'Failed to reset password. The link may have expired.'}
+              {submitError}
             </Alert>
           </motion.div>
         )}
@@ -309,9 +436,9 @@ function ResetPasswordFormInner({ className }: ResetPasswordFormProps) {
           type="submit"
           className="w-full"
           size="lg"
-          disabled={isSubmitting || resetPasswordMutation.isPending}
+          disabled={isSubmitting}
         >
-          {isSubmitting || resetPasswordMutation.isPending ? (
+          {isSubmitting ? (
             <>
               <Spinner size="sm" className="mr-2" />
               Resetting...

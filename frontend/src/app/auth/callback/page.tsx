@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { config } from '@/config';
 import type { User } from '@/types';
 import { lawyerApi } from '@/lib/api/lawyer';
+import { authApi } from '@/lib/api/auth';
 
 // Backend me response format
 interface BackendMeResponse {
@@ -48,6 +49,127 @@ function transformBackendUser(backendUser: BackendMeResponse['user']): User {
     createdAt: backendUser.created_at,
     updatedAt: backendUser.created_at,
   };
+}
+
+// Error display component with resend verification option
+function ErrorDisplay({ error, isExpiredLink }: { error: string; isExpiredLink: boolean }) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  const handleResendVerification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || isResending) return;
+
+    setIsResending(true);
+    try {
+      await authApi.resendVerification(email);
+      setResendSuccess(true);
+      toast({
+        title: 'Verification Email Sent',
+        description: 'Please check your inbox and click the new verification link.',
+        variant: 'success',
+      });
+    } catch {
+      toast({
+        title: 'Failed to Send',
+        description: 'Could not send verification email. Please try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="text-center max-w-md w-full">
+        <div className="text-red-500 mb-4">
+          <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-semibold mb-2">
+          {isExpiredLink ? 'Link Expired' : 'Authentication Failed'}
+        </h1>
+        <p className="text-muted-foreground mb-6">{error}</p>
+        
+        {/* Resend Verification Form */}
+        {isExpiredLink && !resendSuccess && (
+          <form onSubmit={handleResendVerification} className="mb-6">
+            <div className="space-y-3">
+              <div className="text-left">
+                <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
+                  Enter your email to resend verification
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="w-full px-4 py-2.5 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isResending || !email}
+                className="w-full py-2.5 px-4 rounded-lg text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: '#4F46E5' }}
+              >
+                {isResending ? 'Sending...' : 'Resend Verification Email'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Success message after resend */}
+        {resendSuccess && (
+          <div className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-medium">Verification email sent!</span>
+            </div>
+            <p className="text-sm text-green-600 dark:text-green-500 mt-1">
+              Please check your inbox and click the verification link.
+            </p>
+          </div>
+        )}
+        
+        <div className="space-y-3">
+          <a
+            href="/login"
+            className="block w-full py-2.5 px-4 rounded-lg font-medium transition-colors border"
+            style={{ 
+              background: '#ffffff', 
+              color: '#374151',
+              borderColor: '#E5E7EB'
+            }}
+          >
+            Back to Login
+          </a>
+          {isExpiredLink && (
+            <a
+              href="/register"
+              className="block w-full py-2.5 px-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Create a new account
+            </a>
+          )}
+        </div>
+        
+        <p className="text-xs text-muted-foreground mt-6">
+          {isExpiredLink 
+            ? 'Verification links expire after 24 hours for security reasons.'
+            : 'Redirecting to login in a few seconds...'}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function AuthCallbackContent() {
@@ -186,7 +308,7 @@ function AuthCallbackContent() {
               console.log('User fetch failed, trying sync-profile...', fetchErr);
               // User might not have a profile yet, need to sync
               try {
-                await axios.post(
+                const syncResponse = await axios.post(
                   `${config.api.baseUrl}/auth/sync-profile`,
                   {},
                   {
@@ -196,6 +318,7 @@ function AuthCallbackContent() {
                     },
                   }
                 );
+                console.log('Sync profile response:', syncResponse.data);
                 
                 // Try getting user again
                 const response = await axios.get<BackendMeResponse>(
@@ -228,9 +351,52 @@ function AuthCallbackContent() {
                   router.replace('/dashboard');
                   return;
                 }
-              } catch (syncErr) {
+              } catch (syncErr: unknown) {
                 console.error('Profile sync error:', syncErr);
-                throw new Error('Failed to create user profile. Please try again.');
+                
+                // Extract error details from axios error
+                let errorMessage = 'Failed to create user profile. Please try again.';
+                if (axios.isAxiosError(syncErr) && syncErr.response?.data) {
+                  const errorData = syncErr.response.data as { error?: { message?: string }; message?: string };
+                  errorMessage = errorData.error?.message || errorData.message || errorMessage;
+                  console.error('Sync error details:', syncErr.response.data);
+                }
+                
+                // If profile already exists, try to login again
+                if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+                  try {
+                    const retryResponse = await axios.get<BackendMeResponse>(
+                      `${config.api.baseUrl}/auth/me`,
+                      {
+                        headers: {
+                          'Authorization': `Bearer ${accessToken}`,
+                          'Content-Type': 'application/json',
+                        },
+                      }
+                    );
+                    
+                    if (retryResponse.data.success && retryResponse.data.user) {
+                      const user = transformBackendUser(retryResponse.data.user);
+                      login(user, { accessToken, refreshToken, expiresAt });
+                      
+                      const lawyerSubmitted = await submitPendingLawyerRegistration();
+                      toast({ 
+                        title: 'Success', 
+                        description: lawyerSubmitted 
+                          ? 'Signed in! Your lawyer registration has been submitted for review.'
+                          : 'Successfully signed in!', 
+                        variant: 'success' 
+                      });
+                      
+                      router.replace('/dashboard');
+                      return;
+                    }
+                  } catch (retryErr) {
+                    console.error('Retry login failed:', retryErr);
+                  }
+                }
+                
+                throw new Error(errorMessage);
               }
             }
           }
@@ -272,56 +438,10 @@ function AuthCallbackContent() {
     const isExpiredLink = error.includes('expired') || error.includes('invalid');
     
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-semibold mb-2">
-            {isExpiredLink ? 'Link Expired' : 'Authentication Failed'}
-          </h1>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          
-          <div className="space-y-3">
-            {isExpiredLink && (
-              <a
-                href="/register"
-                className="block w-full py-2.5 px-4 rounded-lg text-white font-medium transition-colors"
-                style={{ background: '#4F46E5' }}
-              >
-                Register Again
-              </a>
-            )}
-            <a
-              href="/login"
-              className="block w-full py-2.5 px-4 rounded-lg font-medium transition-colors border"
-              style={{ 
-                background: isExpiredLink ? '#ffffff' : '#4F46E5', 
-                color: isExpiredLink ? '#374151' : '#ffffff',
-                borderColor: isExpiredLink ? '#E5E7EB' : '#4F46E5'
-              }}
-            >
-              {isExpiredLink ? 'Back to Login' : 'Go to Login'}
-            </a>
-            {isExpiredLink && (
-              <a
-                href="/forgot-password"
-                className="block w-full py-2.5 px-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Forgot Password?
-              </a>
-            )}
-          </div>
-          
-          <p className="text-xs text-muted-foreground mt-6">
-            {isExpiredLink 
-              ? 'Verification links expire after 24 hours for security reasons.'
-              : 'Redirecting to login in a few seconds...'}
-          </p>
-        </div>
-      </div>
+      <ErrorDisplay 
+        error={error} 
+        isExpiredLink={isExpiredLink} 
+      />
     );
   }
 

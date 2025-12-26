@@ -63,6 +63,12 @@ router.post(
 );
 
 router.post(
+  '/resend-verification',
+  rateLimiter.auth,
+  asyncHandler(authController.resendVerification)
+);
+
+router.post(
   '/refresh',
   validate(refreshTokenSchema),
   asyncHandler(authController.refresh)

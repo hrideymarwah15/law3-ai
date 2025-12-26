@@ -133,20 +133,52 @@ export interface ResetPasswordResponse {
 export const authApi = {
   // Login (backend uses /signin) - transforms backend response to frontend format
   login: async (data: LoginFormData): Promise<{ data: LoginResponse }> => {
-    const response = await api.post<BackendSigninResponse>("/auth/signin", data);
-    const backendData = response as unknown as BackendSigninResponse;
-    
-    if (backendData.success && backendData.session && backendData.user) {
-      return {
-        data: {
-          user: transformBackendUser(backendData.user),
-          accessToken: backendData.session.access_token,
-          refreshToken: backendData.session.refresh_token,
-          expiresIn: Math.floor((backendData.session.expires_at * 1000 - Date.now()) / 1000),
+    try {
+      const response = await api.post<BackendSigninResponse>("/auth/signin", data);
+      const backendData = response as unknown as BackendSigninResponse;
+      
+      if (backendData.success && backendData.session && backendData.user) {
+        return {
+          data: {
+            user: transformBackendUser(backendData.user),
+            accessToken: backendData.session.access_token,
+            refreshToken: backendData.session.refresh_token,
+            expiresIn: Math.floor((backendData.session.expires_at * 1000 - Date.now()) / 1000),
+          }
+        };
+      }
+      throw new Error('Login failed');
+    } catch (error: unknown) {
+      // Handle email not verified error
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { 
+          response?: { 
+            status?: number;
+            data?: { 
+              error?: { code?: string; message?: string };
+              needsVerification?: boolean;
+              email?: string;
+            } 
+          } 
+        };
+        
+        if (axiosError.response?.status === 403 && axiosError.response?.data?.needsVerification) {
+          const verificationError = new Error(
+            axiosError.response.data.error?.message || 
+            'Please verify your email before signing in.'
+          );
+          (verificationError as Error & { code?: string; needsVerification?: boolean; email?: string }).code = 'EMAIL_NOT_VERIFIED';
+          (verificationError as Error & { code?: string; needsVerification?: boolean; email?: string }).needsVerification = true;
+          (verificationError as Error & { code?: string; needsVerification?: boolean; email?: string }).email = axiosError.response.data.email;
+          throw verificationError;
         }
-      };
+        
+        // Handle other errors
+        const message = axiosError.response?.data?.error?.message || 'Invalid credentials';
+        throw new Error(message);
+      }
+      throw error;
     }
-    throw new Error('Login failed');
   },
 
   // Register (backend uses /signup) - transforms backend response

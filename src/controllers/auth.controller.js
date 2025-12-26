@@ -111,6 +111,96 @@ class AuthController {
   }
 
   /**
+   * POST /auth/resend-verification
+   * Resend email verification link
+   */
+  async resendVerification(req, res, next) {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        throw new ValidationError('Email is required');
+      }
+
+      console.log('[RESEND] Attempting to resend verification for:', email);
+
+      // First try the resend method
+      let { data, error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: `${process.env.FRONTEND_URL}/auth/callback`,
+        },
+      });
+
+      console.log('[RESEND] Resend result:', { data, error: error?.message });
+
+      // If resend fails (user might be in a different state), try alternative approaches
+      if (error) {
+        logger.warn({ message: 'Resend method failed, trying alternative', error: error.message, email });
+        console.log('[RESEND] Standard resend failed:', error.message);
+        
+        // Try using signInWithOtp which sends a magic link (works as verification)
+        const otpResult = await supabase.auth.signInWithOtp({
+          email: email,
+          options: {
+            shouldCreateUser: false, // Don't create new user, just send to existing
+            emailRedirectTo: `${process.env.FRONTEND_URL}/auth/callback`,
+          },
+        });
+
+        console.log('[RESEND] OTP result:', { data: otpResult.data, error: otpResult.error?.message });
+
+        if (otpResult.error) {
+          logger.warn({ message: 'OTP fallback also failed', error: otpResult.error.message, email });
+          console.log('[RESEND] OTP also failed:', otpResult.error.message);
+          
+          // Last resort: Check if user exists and send password reset as verification workaround
+          const { data: existingUser } = await supabaseAdmin
+            .from('users')
+            .select('id, email')
+            .eq('email', email)
+            .single();
+
+          console.log('[RESEND] User exists in DB:', !!existingUser);
+
+          if (existingUser) {
+            // Send password reset email which also serves as email verification
+            const resetResult = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: `${process.env.FRONTEND_URL}/auth/callback`,
+            });
+            
+            console.log('[RESEND] Reset password result:', { error: resetResult.error?.message });
+            
+            if (resetResult.error) {
+              logger.error({ message: 'All verification methods failed', email });
+              console.log('[RESEND] ALL METHODS FAILED');
+            } else {
+              logger.info({ message: 'Sent password reset as verification fallback', email });
+              console.log('[RESEND] Sent via password reset fallback');
+            }
+          }
+        } else {
+          logger.info({ message: 'Verification sent via OTP method', email });
+          console.log('[RESEND] SUCCESS via OTP method');
+        }
+      } else {
+        logger.info({ message: 'Verification email resent via standard method', email });
+        console.log('[RESEND] SUCCESS via standard resend');
+      }
+
+      // Always return success to prevent email enumeration
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, a verification link has been sent.',
+      });
+    } catch (error) {
+      console.error('[RESEND] Exception:', error);
+      next(error);
+    }
+  }
+
+  /**
    * POST /auth/signin
    * Sign in with email/phone and password
    */
@@ -129,12 +219,75 @@ class AuthController {
         throw new UnauthorizedError('Invalid credentials');
       }
 
+      // Check if email is verified (for email-based login)
+      if (email && !data.user.email_confirmed_at) {
+        logger.warn({ message: 'Email not verified', email, userId: data.user.id });
+        
+        // Sign out the user since they shouldn't have access
+        await supabase.auth.signOut();
+        
+        return res.status(403).json({
+          success: false,
+          error: {
+            code: 'EMAIL_NOT_VERIFIED',
+            message: 'Please verify your email before signing in. Check your inbox for the verification link.',
+          },
+          needsVerification: true,
+          email: email,
+        });
+      }
+
       // Fetch user profile
-      const { data: profile } = await supabaseAdmin
+      const { data: profile, error: profileError } = await supabaseAdmin
         .from('users')
         .select('*')
         .eq('id', data.user.id)
         .single();
+
+      // If profile doesn't exist, create it (safety net)
+      if (profileError || !profile) {
+        logger.warn({ message: 'Profile not found during signin, creating...', userId: data.user.id });
+        
+        const metadata = data.user.user_metadata || {};
+        const { data: newProfile, error: createError } = await supabaseAdmin
+          .from('users')
+          .upsert({
+            id: data.user.id,
+            email: data.user.email || null,
+            phone: data.user.phone || null,
+            first_name: metadata.first_name || 'User',
+            last_name: metadata.last_name || null,
+            role: 'user',
+            status: 'active',
+            is_active: true,
+            is_email_verified: !!data.user.email_confirmed_at,
+            is_phone_verified: !!data.user.phone_confirmed_at,
+            preferred_language: 'en',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' })
+          .select()
+          .single();
+
+        if (createError) {
+          logger.error({ message: 'Failed to create profile during signin', error: createError.message });
+        }
+      }
+
+      // Re-fetch profile to ensure we have latest data
+      const { data: finalProfile } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      // Update email verification status if needed
+      if (data.user.email_confirmed_at && finalProfile && !finalProfile.is_email_verified) {
+        await supabaseAdmin
+          .from('users')
+          .update({ is_email_verified: true, updated_at: new Date().toISOString() })
+          .eq('id', data.user.id);
+      }
 
       // Log audit event
       await auditService.log({
@@ -147,7 +300,7 @@ class AuthController {
         userAgent: req.headers['user-agent'],
       });
 
-      logger.info({ message: 'User signed in', userId: data.user.id });
+      logger.info({ message: 'User signed in', userId: data.user.id, role: finalProfile?.role });
 
       res.json({
         success: true,
@@ -160,11 +313,11 @@ class AuthController {
           id: data.user.id,
           email: data.user.email,
           phone: data.user.phone,
-          role: profile?.role || 'user',
-          first_name: profile?.first_name,
-          last_name: profile?.last_name,
-          display_name: profile?.display_name,
-          is_verified: profile?.is_verified || profile?.is_email_verified || profile?.is_phone_verified,
+          role: finalProfile?.role || 'user',
+          first_name: finalProfile?.first_name,
+          last_name: finalProfile?.last_name,
+          display_name: finalProfile?.display_name,
+          is_verified: finalProfile?.is_email_verified || finalProfile?.is_phone_verified || false,
         },
       });
     } catch (error) {
@@ -606,19 +759,167 @@ class AuthController {
         throw new UnauthorizedError('Invalid or expired token');
       }
 
-      // Check if profile already exists
-      const { data: existingProfile } = await supabaseAdmin
+      // Check if profile already exists by ID
+      const { data: existingProfileById } = await supabaseAdmin
         .from('users')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      if (existingProfile) {
+      if (existingProfileById) {
+        // Update email verification status if needed
+        if (user.email_confirmed_at && !existingProfileById.is_email_verified) {
+          await supabaseAdmin
+            .from('users')
+            .update({ is_email_verified: true, updated_at: new Date().toISOString() })
+            .eq('id', user.id);
+          existingProfileById.is_email_verified = true;
+        }
         return res.json({
           success: true,
           message: 'Profile already exists',
-          user: existingProfile,
+          user: existingProfileById,
         });
+      }
+
+      // Check if profile exists by email (different auth user ID but same email)
+      if (user.email) {
+        const { data: existingProfileByEmail } = await supabaseAdmin
+          .from('users')
+          .select('*')
+          .eq('email', user.email)
+          .single();
+
+        if (existingProfileByEmail) {
+          // If the profile has a different ID, we need to migrate it
+          if (existingProfileByEmail.id !== user.id) {
+            logger.info({ 
+              message: 'Migrating profile to new auth user ID', 
+              oldId: existingProfileByEmail.id,
+              newId: user.id,
+              email: user.email 
+            });
+            
+            // Check for associated lawyer profile that would be cascade deleted
+            const { data: existingLawyer } = await supabaseAdmin
+              .from('lawyers')
+              .select('*')
+              .eq('user_id', existingProfileByEmail.id)
+              .single();
+
+            // Check for lawyer registration requests
+            const { data: existingRegistration } = await supabaseAdmin
+              .from('lawyer_registration_requests')
+              .select('*')
+              .eq('user_id', existingProfileByEmail.id)
+              .single();
+
+            // Delete old profile (this cascades to lawyers table)
+            await supabaseAdmin
+              .from('users')
+              .delete()
+              .eq('email', user.email);
+
+            // Create new profile with correct ID
+            const { data: migratedProfile, error: migrateError } = await supabaseAdmin
+              .from('users')
+              .insert({
+                id: user.id,
+                email: existingProfileByEmail.email,
+                phone: existingProfileByEmail.phone,
+                first_name: existingProfileByEmail.first_name,
+                last_name: existingProfileByEmail.last_name,
+                role: existingProfileByEmail.role,
+                status: existingProfileByEmail.status,
+                is_active: existingProfileByEmail.is_active,
+                is_email_verified: !!user.email_confirmed_at,
+                is_phone_verified: existingProfileByEmail.is_phone_verified,
+                preferred_language: existingProfileByEmail.preferred_language,
+                avatar_url: existingProfileByEmail.avatar_url,
+                city: existingProfileByEmail.city,
+                state: existingProfileByEmail.state,
+                created_at: existingProfileByEmail.created_at,
+                updated_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+
+            if (migrateError) {
+              logger.error({ 
+                message: 'Failed to migrate profile', 
+                error: migrateError.message,
+                email: user.email 
+              });
+              // Fall back to returning old profile data
+              return res.json({
+                success: true,
+                message: 'Profile found (migration pending)',
+                user: { ...existingProfileByEmail, id: user.id },
+              });
+            }
+
+            // Re-create lawyer profile if it existed
+            if (existingLawyer) {
+              logger.info({ message: 'Re-creating lawyer profile', lawyerId: existingLawyer.id });
+              const { error: lawyerError } = await supabaseAdmin
+                .from('lawyers')
+                .insert({
+                  ...existingLawyer,
+                  id: undefined, // Let DB generate new ID
+                  user_id: user.id,
+                  updated_at: new Date().toISOString(),
+                });
+              
+              if (lawyerError) {
+                logger.error({ 
+                  message: 'Failed to re-create lawyer profile', 
+                  error: lawyerError.message 
+                });
+              }
+            }
+
+            // Re-create registration request if it existed
+            if (existingRegistration) {
+              logger.info({ message: 'Re-creating registration request' });
+              const { error: regError } = await supabaseAdmin
+                .from('lawyer_registration_requests')
+                .insert({
+                  ...existingRegistration,
+                  id: undefined, // Let DB generate new ID
+                  user_id: user.id,
+                  updated_at: new Date().toISOString(),
+                });
+              
+              if (regError) {
+                logger.error({ 
+                  message: 'Failed to re-create registration request', 
+                  error: regError.message 
+                });
+              }
+            }
+
+            return res.json({
+              success: true,
+              message: 'Profile migrated to new auth user',
+              user: migratedProfile,
+            });
+          }
+          
+          // Profile already has correct ID, just update verification status
+          if (user.email_confirmed_at && !existingProfileByEmail.is_email_verified) {
+            await supabaseAdmin
+              .from('users')
+              .update({ is_email_verified: true, updated_at: new Date().toISOString() })
+              .eq('id', user.id);
+            existingProfileByEmail.is_email_verified = true;
+          }
+          
+          return res.json({
+            success: true,
+            message: 'Profile already exists',
+            user: existingProfileByEmail,
+          });
+        }
       }
 
       // Extract name from user metadata
@@ -626,10 +927,10 @@ class AuthController {
       let firstName = metadata.first_name || metadata.name?.split(' ')[0] || 'User';
       let lastName = metadata.last_name || metadata.name?.split(' ').slice(1).join(' ') || null;
 
-      // Create new profile
+      // Create new profile using upsert to handle race conditions
       const { data: newProfile, error: createError } = await supabaseAdmin
         .from('users')
-        .insert({
+        .upsert({
           id: user.id,
           email: user.email || null,
           phone: user.phone || null,
@@ -643,6 +944,9 @@ class AuthController {
           preferred_language: metadata.preferred_language || 'en',
           created_at: user.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
         })
         .select()
         .single();
@@ -653,6 +957,24 @@ class AuthController {
           error: createError.message,
           userId: user.id 
         });
+        
+        // If it's a duplicate email error, try to fetch the existing profile
+        if (createError.message.includes('duplicate key') && createError.message.includes('email')) {
+          const { data: fallbackProfile } = await supabaseAdmin
+            .from('users')
+            .select('*')
+            .eq('email', user.email)
+            .single();
+          
+          if (fallbackProfile) {
+            return res.json({
+              success: true,
+              message: 'Profile found by email',
+              user: fallbackProfile,
+            });
+          }
+        }
+        
         throw new ValidationError('Failed to create user profile: ' + createError.message);
       }
 

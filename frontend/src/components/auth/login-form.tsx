@@ -35,6 +35,9 @@ function LoginFormInner({ className, onSuccess }: LoginFormProps) {
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'apple' | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
   
   const resetSuccess = searchParams.get('reset') === 'success';
   const verifiedSuccess = searchParams.get('verified') === 'success';
@@ -53,7 +56,33 @@ function LoginFormInner({ className, onSuccess }: LoginFormProps) {
     },
   });
 
+  const handleResendVerification = async () => {
+    if (!verificationEmail || resendingVerification) return;
+    
+    setResendingVerification(true);
+    try {
+      await authApi.resendVerification(verificationEmail);
+      toast({
+        title: 'Verification Email Sent',
+        description: 'Please check your inbox and click the verification link.',
+        variant: 'success',
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to Send',
+        description: 'Could not send verification email. Please try again later.',
+        variant: 'error',
+      });
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   const onSubmit = async (data: LoginFormData) => {
+    // Reset verification state on new attempt
+    setNeedsVerification(false);
+    setVerificationEmail(null);
+    
     try {
       await loginMutation.mutateAsync({
         email: data.email,
@@ -67,7 +96,12 @@ function LoginFormInner({ className, onSuccess }: LoginFormProps) {
         router.push(redirectTo);
       }
     } catch (error) {
-      // Error is handled by the mutation
+      // Check for email verification error
+      const err = error as Error & { code?: string; needsVerification?: boolean; email?: string };
+      if (err.code === 'EMAIL_NOT_VERIFIED' || err.needsVerification) {
+        setNeedsVerification(true);
+        setVerificationEmail(err.email || data.email);
+      }
     }
   };
 
@@ -103,7 +137,32 @@ function LoginFormInner({ className, onSuccess }: LoginFormProps) {
 
       {/* Error Message */}
       <AnimatePresence mode="wait">
-        {loginMutation.isError && (
+        {needsVerification && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-6"
+          >
+            <Alert variant="warning" icon={<AlertCircle className="h-4 w-4" />}>
+              <div className="space-y-2">
+                <p className="font-medium">Email verification required</p>
+                <p className="text-sm">
+                  Please verify your email before signing in. Check your inbox for the verification link.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={resendingVerification}
+                  className="text-sm font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+                >
+                  {resendingVerification ? 'Sending...' : 'Resend verification email'}
+                </button>
+              </div>
+            </Alert>
+          </motion.div>
+        )}
+        {loginMutation.isError && !needsVerification && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}

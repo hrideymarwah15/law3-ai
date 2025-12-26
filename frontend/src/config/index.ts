@@ -10,7 +10,13 @@ export const config = {
     tagline: "न्याय सबके लिए | Justice for All",
     description: "AI-Powered Legal Consultation Platform - Connect with verified lawyers across India",
     version: "3.0.0",
-    url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001",
+  },
+
+  // Supabase Configuration
+  supabase: {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL || "https://hvnoxkxxzkqintlzkjlb.supabase.co",
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bm94a3h4emtxaW50bHpramxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzU3MTYsImV4cCI6MjA4MTY1MTcxNn0.wAJdehv8p_PvCxogRW1io024buqQaGY3uLIng-a9Wgk",
   },
 
   // API Configuration
