@@ -93,6 +93,30 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
+    // Handle network errors (no response)
+    if (!error.response) {
+      const networkError = {
+        url: originalRequest?.url || 'unknown',
+        method: originalRequest?.method || 'unknown',
+        message: error.message || 'Network error',
+        code: error.code || 'NETWORK_ERROR',
+        isNetworkError: true,
+      };
+      
+      if (process.env.NODE_ENV === "development") {
+        console.error("API Network Error:", networkError);
+      }
+      
+      // Create a more descriptive error
+      const enhancedError = new Error(
+        error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK'
+          ? 'Unable to connect to server. Please check if the backend is running.'
+          : error.message || 'Network error occurred'
+      );
+      (enhancedError as Error & { isNetworkError: boolean }).isNetworkError = true;
+      return Promise.reject(enhancedError);
+    }
+
     // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       const { tokens, logout } = useAuthStore.getState();
@@ -149,20 +173,23 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // Handle other errors
+    // Handle other errors with response
     const errorMessage =
       error.response?.data?.error?.message ||
+      error.response?.data?.message ||
       error.message ||
       "An unexpected error occurred";
 
-    // Log error in development
+    // Log detailed error in development
     if (process.env.NODE_ENV === "development") {
       console.error("API Error:", {
-        url: originalRequest?.url,
-        method: originalRequest?.method,
+        url: originalRequest?.url || 'unknown',
+        method: originalRequest?.method || 'unknown',
         status: error.response?.status,
+        statusText: error.response?.statusText,
         message: errorMessage,
         data: error.response?.data,
+        code: error.code,
       });
     }
 

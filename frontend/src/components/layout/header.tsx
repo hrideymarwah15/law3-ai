@@ -80,7 +80,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/80 backdrop-blur-lg">
       <div className="container-wide">
-        <div className="flex h-16 items-center justify-between gap-4 lg:h-18">
+        <div className="flex h-16 items-center justify-between gap-4 lg:h-18 relative">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 text-white">
@@ -97,7 +97,8 @@ export function Header() {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-1">
+          {/* Desktop Navigation */}
+          <nav className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-1">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (

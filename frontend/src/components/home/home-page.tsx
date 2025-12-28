@@ -2,13 +2,13 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { 
-  Scale, 
-  Search, 
-  Video, 
-  FileText, 
-  Shield, 
-  Clock, 
+import {
+  Scale,
+  Search,
+  Video,
+  FileText,
+  Shield,
+  Clock,
   Star,
   ArrowRight,
   CheckCircle,
@@ -30,15 +30,40 @@ import { config } from '@/config';
 // ============================================
 
 const fadeInUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 50,
+      damping: 20,
+      duration: 0.8
+    }
+  },
+};
+
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.9 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    transition: {
+      type: "spring",
+      stiffness: 100,
+      damping: 15
+    }
+  },
 };
 
 const staggerContainer = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 },
+    transition: {
+      staggerChildren: 0.15,
+      delayChildren: 0.1
+    },
   },
 };
 
@@ -51,7 +76,7 @@ function HeroSection() {
     <section className="relative overflow-hidden bg-gradient-to-b from-primary/5 via-background to-background pt-20 pb-32">
       {/* Background Pattern */}
       <div className="absolute inset-0 bg-[url('/patterns/grid.svg')] opacity-5" />
-      
+
       <div className="container relative">
         <motion.div
           initial="hidden"
@@ -85,7 +110,7 @@ function HeroSection() {
             variants={fadeInUp}
             className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto"
           >
-            Connect with verified lawyers across India for expert legal advice. 
+            Connect with verified lawyers across India for expert legal advice.
             Video consultations, document review, and ongoing legal support — all in one place.
           </motion.p>
 
@@ -97,11 +122,11 @@ function HeroSection() {
                 <input
                   type="text"
                   placeholder="Search for lawyers or legal services..."
-                  className="w-full h-14 pl-12 pr-4 rounded-xl border border-input bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-base"
+                  className="w-full h-14 px-12 rounded-xl border border-input bg-background focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all text-base text-center placeholder:text-center"
                 />
               </div>
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 className="h-14 px-8"
                 style={{ background: '#4F46E5', color: '#ffffff' }}
               >
@@ -109,7 +134,7 @@ function HeroSection() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
-            
+
             {/* Popular Searches */}
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               <span className="text-sm text-muted-foreground">Popular:</span>
@@ -176,7 +201,7 @@ function PracticeAreasSection() {
           <motion.div variants={fadeInUp} className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-4">Practice Areas</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Find expert lawyers across various legal domains. Our verified professionals 
+              Find expert lawyers across various legal domains. Our verified professionals
               are ready to help with your specific legal needs.
             </p>
           </motion.div>
@@ -255,7 +280,7 @@ function HowItWorksSection() {
             <Badge variant="secondary" className="mb-4">How It Works</Badge>
             <h2 className="text-3xl font-bold mb-4">Three Simple Steps</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Getting legal help has never been easier. Our streamlined process 
+              Getting legal help has never been easier. Our streamlined process
               connects you with the right lawyer in minutes.
             </p>
           </motion.div>
@@ -355,20 +380,12 @@ function FeaturedLawyersSection() {
           viewport={{ once: true }}
           variants={staggerContainer}
         >
-          <motion.div variants={fadeInUp} className="flex justify-between items-end mb-12">
-            <div>
-              <Badge variant="secondary" className="mb-4">Top Rated</Badge>
-              <h2 className="text-3xl font-bold mb-2">Featured Lawyers</h2>
-              <p className="text-muted-foreground">
-                Highly rated legal professionals trusted by thousands
-              </p>
-            </div>
-            <Button variant="outline" asChild className="hidden md:flex">
-              <Link href="/lawyers" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600, padding: '0 1rem', height: '2.75rem', borderRadius: '0.5rem' }}>
-                View All Lawyers
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Link>
-            </Button>
+          <motion.div variants={fadeInUp} className="text-center mb-12">
+            <Badge variant="secondary" className="mb-4">Top Rated</Badge>
+            <h2 className="text-3xl font-bold mb-2">Featured Lawyers</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Highly rated legal professionals trusted by thousands
+            </p>
           </motion.div>
 
           <motion.div
@@ -376,28 +393,28 @@ function FeaturedLawyersSection() {
             className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
             {featuredLawyers.map((lawyer) => (
-              <motion.div key={lawyer.id} variants={fadeInUp}>
+              <motion.div key={lawyer.id} variants={scaleIn}>
                 <Link href={`/lawyers/${lawyer.id}`}>
-                  <Card className="p-6 hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer">
-                    <div className="flex gap-4">
+                  <Card className="p-6 hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer text-center">
+                    <div className="flex flex-col items-center gap-4">
                       <Avatar size="lg" fallback={lawyer.initials} />
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 w-full">
                         <h3 className="font-semibold truncate">{lawyer.name}</h3>
                         <p className="text-sm text-muted-foreground">{lawyer.specialization}</p>
-                        <div className="flex items-center gap-1 mt-1">
+                        <div className="flex justify-center items-center gap-1 mt-1">
                           <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                           <span className="font-medium">{lawyer.rating}</span>
                           <span className="text-muted-foreground text-sm">({lawyer.reviews})</span>
                         </div>
                       </div>
                     </div>
-                    
-                    <div className="mt-4 pt-4 border-t flex justify-between items-center">
+
+                    <div className="mt-4 pt-4 border-t flex flex-col items-center gap-2">
                       <div>
                         <p className="text-sm text-muted-foreground">{lawyer.experience} years exp.</p>
                         <p className="text-sm text-muted-foreground">{lawyer.location}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-center">
                         <p className="font-semibold text-primary">₹{lawyer.consultationFee}</p>
                         <p className="text-xs text-muted-foreground">per consultation</p>
                       </div>
@@ -408,7 +425,7 @@ function FeaturedLawyersSection() {
             ))}
           </motion.div>
 
-          <motion.div variants={fadeInUp} className="text-center mt-8 md:hidden">
+          <motion.div variants={fadeInUp} className="text-center mt-12">
             <Button variant="outline" asChild>
               <Link href="/lawyers" style={{ background: '#ffffff', color: '#4F46E5', border: '2px solid #4F46E5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600, padding: '0 1rem', height: '2.75rem', borderRadius: '0.5rem' }}>
                 View All Lawyers
@@ -474,8 +491,8 @@ function TestimonialsSection() {
           >
             {testimonials.map((testimonial) => (
               <motion.div key={testimonial.id} variants={fadeInUp}>
-                <Card className="p-6 h-full flex flex-col">
-                  <div className="flex gap-1 mb-4">
+                <Card className="p-6 h-full flex flex-col text-center">
+                  <div className="flex justify-center gap-1 mb-4">
                     {Array.from({ length: testimonial.rating }).map((_, i) => (
                       <Star key={i} className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                     ))}
@@ -483,7 +500,7 @@ function TestimonialsSection() {
                   <p className="text-muted-foreground flex-1 mb-6">
                     &ldquo;{testimonial.content}&rdquo;
                   </p>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-center gap-3">
                     <Avatar fallback={testimonial.author.split(' ').map(n => n[0]).join('')} />
                     <div>
                       <p className="font-semibold">{testimonial.author}</p>
